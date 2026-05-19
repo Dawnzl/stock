@@ -1,0 +1,933 @@
+<template>
+  <div class="add-page" @swipe="handleSwipe">
+    <div class="top-bar">
+      <div class="top-cell back-cell" @click="goBack">
+        <text class="back-btn">←</text>
+      </div>
+      <div class="title-cell">
+        <text class="title">添加股票</text>
+      </div>
+      <div class="top-cell mode-btn" @click="toggleKeyboardMode">
+        <text class="mode-text">{{ showEnglishKeyboard ? "123" : "EN" }}</text>
+      </div>
+    </div>
+
+    <div class="input-box">
+      <text class="input-value">{{ displayCode }}</text>
+      <div class="input-delete" @click="removeOne">
+        <text class="input-delete-text"><</text>
+      </div>
+    </div>
+
+    <div class="digit-grid" if="{{ !showEnglishKeyboard }}">
+      <div class="grid-row">
+        <div class="key-btn key-fl" @click="tap1"><text class="key-text">1</text></div>
+        <div class="key-btn key-mid" @click="tap2"><text class="key-text">2</text></div>
+        <div class="key-btn key-fr" @click="tap3"><text class="key-text">3</text></div>
+      </div>
+      <div class="grid-row">
+        <div class="key-btn key-fl" @click="tap4"><text class="key-text">4</text></div>
+        <div class="key-btn key-mid" @click="tap5"><text class="key-text">5</text></div>
+        <div class="key-btn key-fr" @click="tap6"><text class="key-text">6</text></div>
+      </div>
+      <div class="grid-row">
+        <div class="key-btn key-fl" @click="tap7"><text class="key-text">7</text></div>
+        <div class="key-btn key-mid" @click="tap8"><text class="key-text">8</text></div>
+        <div class="key-btn key-fr" @click="tap9"><text class="key-text">9</text></div>
+      </div>
+      <div class="grid-row grid-row-last">
+        <div class="key-btn key-action key-fl" @click="clearAll"><text class="key-text">C</text></div>
+        <div class="key-btn key-mid" @click="tap0"><text class="key-text">0</text></div>
+        <div class="key-btn key-action key-fr" @click="removeOne"><text class="key-text"><</text></div>
+      </div>
+    </div>
+
+    <div class="alpha-grid" if="{{ showEnglishKeyboard }}">
+      <scroll class="alpha-scroll" scroll-x="{{true}}">
+        <div class="alpha-board">
+          <div class="alpha-row">
+            <div class="alpha-key" @click="tapQ"><text class="alpha-text">Q</text></div>
+            <div class="alpha-key" @click="tapW"><text class="alpha-text">W</text></div>
+            <div class="alpha-key" @click="tapE"><text class="alpha-text">E</text></div>
+            <div class="alpha-key" @click="tapR"><text class="alpha-text">R</text></div>
+            <div class="alpha-key" @click="tapT"><text class="alpha-text">T</text></div>
+            <div class="alpha-key" @click="tapY"><text class="alpha-text">Y</text></div>
+            <div class="alpha-key" @click="tapU"><text class="alpha-text">U</text></div>
+            <div class="alpha-key" @click="tapI"><text class="alpha-text">I</text></div>
+            <div class="alpha-key" @click="tapO"><text class="alpha-text">O</text></div>
+            <div class="alpha-key alpha-key-last" @click="tapP"><text class="alpha-text">P</text></div>
+          </div>
+          <div class="alpha-row alpha-row-mid">
+            <div class="alpha-key" @click="tapA"><text class="alpha-text">A</text></div>
+            <div class="alpha-key" @click="tapS"><text class="alpha-text">S</text></div>
+            <div class="alpha-key" @click="tapD"><text class="alpha-text">D</text></div>
+            <div class="alpha-key" @click="tapF"><text class="alpha-text">F</text></div>
+            <div class="alpha-key" @click="tapG"><text class="alpha-text">G</text></div>
+            <div class="alpha-key" @click="tapH"><text class="alpha-text">H</text></div>
+            <div class="alpha-key" @click="tapJ"><text class="alpha-text">J</text></div>
+            <div class="alpha-key" @click="tapK"><text class="alpha-text">K</text></div>
+            <div class="alpha-key alpha-key-last" @click="tapL"><text class="alpha-text">L</text></div>
+          </div>
+          <div class="alpha-row alpha-row-last">
+            <div class="alpha-key" @click="tapZ"><text class="alpha-text">Z</text></div>
+            <div class="alpha-key" @click="tapX"><text class="alpha-text">X</text></div>
+            <div class="alpha-key" @click="tapC"><text class="alpha-text">C</text></div>
+            <div class="alpha-key" @click="tapV"><text class="alpha-text">V</text></div>
+            <div class="alpha-key" @click="tapB"><text class="alpha-text">B</text></div>
+            <div class="alpha-key" @click="tapN"><text class="alpha-text">N</text></div>
+            <div class="alpha-key alpha-key-last" @click="tapM"><text class="alpha-text">M</text></div>
+          </div>
+        </div>
+      </scroll>
+    </div>
+
+    <div class="confirm-btn" @click="confirmAdd">
+      <text class="confirm-text">{{ isAdding ? "校验中..." : "确认添加" }}</text>
+    </div>
+  </div>
+</template>
+
+<script>
+import router from "@system.router";
+import prompt from "@system.prompt";
+import storage from "@system.storage";
+import brightness from "@system.brightness";
+const fetch = require("@system.fetch");
+
+const STORAGE_KEY = "stock_watch_data";
+
+export default {
+  private: {
+    codeInput: "",
+    displayCode: "------",
+    showEnglishKeyboard: false,
+    isAdding: false
+  },
+
+  onInit: function() {
+    this.applyKeepScreenOnSetting();
+  },
+
+  onShow: function() {
+    this.applyKeepScreenOnSetting();
+  },
+
+  onDestroy: function() {
+    this.setKeepScreenOn(false);
+  },
+
+  setKeepScreenOn: function(on) {
+    try {
+      brightness.setKeepScreenOn({
+        keepScreenOn: !!on
+      });
+    } catch (e) {}
+  },
+
+  applyKeepScreenOnSetting: function() {
+    this.getStoredData(function(data) {
+      var keep = typeof data.keepScreenOn === "boolean" ? data.keepScreenOn : true;
+      this.setKeepScreenOn(keep);
+    }.bind(this));
+  },
+
+  normalizeInputCode: function(code) {
+    var raw = String(code || "").replace(/\s+/g, "").toUpperCase();
+    if (!raw) return { code: "", type: "" };
+    if (raw.indexOf("JJ") === 0) raw = "F" + raw.slice(2);
+    if (raw.indexOf("FUND") === 0) raw = "F" + raw.slice(4);
+    if (raw.indexOf("US") === 0 && /^[A-Z]{1,10}$/.test(raw.slice(2))) raw = raw.slice(2);
+    if (raw === "000001" || raw.indexOf("399") === 0) {
+      while (raw.length < 6) raw = "0" + raw;
+      return { code: raw, type: "index" };
+    }
+    if (/^\d{4,5}$/.test(raw)) {
+      while (raw.length < 5) raw = "0" + raw;
+      return { code: raw, type: "stock" };
+    }
+    if (/^\d{6}$/.test(raw)) {
+      if (raw.indexOf("399") === 0 || raw === "000001") return { code: raw, type: "index" };
+      return { code: raw, type: "stock" };
+    }
+    if (/^F\d{6}$/.test(raw)) return { code: raw.slice(1), type: "fund" };
+    if (/^(XAU|XAG|XAUUSD|XAGUSD|LONGLD|LONSILVER|GC0|SI0|GC00Y|SI00Y)$/.test(raw)) {
+      var metalCode = "XAU";
+      if (/^(XAG|XAGUSD|LONSILVER|SI0|SI00Y)$/.test(raw)) metalCode = "XAG";
+      return { code: metalCode, type: "metal" };
+    }
+    if (/^[A-Z]{2,10}USDT$/.test(raw)) return { code: raw.replace(/USDT$/, "-USDT"), type: "crypto" };
+    if (/^[A-Z]{2,10}-USDT$/.test(raw)) return { code: raw, type: "crypto" };
+    if (/^[A-Z][A-Z0-9.-]{0,9}$/.test(raw)) return { code: raw, type: "us" };
+    return { code: raw, type: "" };
+  },
+
+  updateDisplay: function() {
+    var code = this.codeInput || "";
+    if (this.showEnglishKeyboard) {
+      this.displayCode = code ? code : "输入美股代码";
+      return;
+    }
+    var maxLen = 6;
+    var pad = maxLen - code.length + 1;
+    if (pad < 1) pad = 1;
+    this.displayCode = code + new Array(pad).join("-");
+  },
+
+  appendText: function(text) {
+    if (this.isAdding) return;
+    var value = String(text || "").toUpperCase();
+    if (!value) return;
+    if (!/^[A-Z0-9.-]+$/.test(value)) return;
+    if (this.codeInput.length + value.length > 12) return;
+    this.codeInput = this.codeInput + value;
+    this.updateDisplay();
+  },
+
+  appendDigit: function(digit) {
+    if (this.isAdding) return;
+    if (this.codeInput.length >= 6) return;
+    this.codeInput = this.codeInput + String(digit);
+    this.updateDisplay();
+  },
+
+  tap0: function() { this.appendDigit(0); },
+  tap1: function() { this.appendDigit(1); },
+  tap2: function() { this.appendDigit(2); },
+  tap3: function() { this.appendDigit(3); },
+  tap4: function() { this.appendDigit(4); },
+  tap5: function() { this.appendDigit(5); },
+  tap6: function() { this.appendDigit(6); },
+  tap7: function() { this.appendDigit(7); },
+  tap8: function() { this.appendDigit(8); },
+  tap9: function() { this.appendDigit(9); },
+
+  tapA: function() { this.appendText("A"); },
+  tapB: function() { this.appendText("B"); },
+  tapC: function() { this.appendText("C"); },
+  tapD: function() { this.appendText("D"); },
+  tapE: function() { this.appendText("E"); },
+  tapF: function() { this.appendText("F"); },
+  tapG: function() { this.appendText("G"); },
+  tapH: function() { this.appendText("H"); },
+  tapI: function() { this.appendText("I"); },
+  tapJ: function() { this.appendText("J"); },
+  tapK: function() { this.appendText("K"); },
+  tapL: function() { this.appendText("L"); },
+  tapM: function() { this.appendText("M"); },
+  tapN: function() { this.appendText("N"); },
+  tapO: function() { this.appendText("O"); },
+  tapP: function() { this.appendText("P"); },
+  tapQ: function() { this.appendText("Q"); },
+  tapR: function() { this.appendText("R"); },
+  tapS: function() { this.appendText("S"); },
+  tapT: function() { this.appendText("T"); },
+  tapU: function() { this.appendText("U"); },
+  tapV: function() { this.appendText("V"); },
+  tapW: function() { this.appendText("W"); },
+  tapX: function() { this.appendText("X"); },
+  tapY: function() { this.appendText("Y"); },
+  tapZ: function() { this.appendText("Z"); },
+
+  toggleKeyboardMode: function() {
+    if (this.isAdding) return;
+    this.showEnglishKeyboard = !this.showEnglishKeyboard;
+    this.updateDisplay();
+  },
+
+  removeOne: function() {
+    if (this.isAdding) return;
+    if (!this.codeInput) return;
+    this.codeInput = this.codeInput.slice(0, this.codeInput.length - 1);
+    this.updateDisplay();
+  },
+
+  clearAll: function() {
+    if (this.isAdding) return;
+    this.codeInput = "";
+    this.updateDisplay();
+  },
+
+  goBack: function() {
+    if (this.isAdding) return;
+    router.back();
+  },
+
+  handleSwipe: function(event) {
+    if (event && event.direction === "right") {
+      this.goBack();
+    }
+  },
+
+  getMarketPrefix: function(stockCode, type) {
+    var code = String(stockCode || "").toUpperCase();
+    if (type === "us") return "us";
+    if (type === "index") {
+      if (code === "000001") return "sh";
+      if (code.indexOf("399") === 0) return "sz";
+      return "sh";
+    }
+    if (type === "fund" || type === "crypto" || type === "metal") return "";
+    if (/^\d{5}$/.test(code)) return "hk";
+    var first3 = code.slice(0, 3);
+    var first2 = code.slice(0, 2);
+    if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588"].indexOf(first3) > -1) return "sh";
+    if (first3 === "159") return "sz";
+    if (["600", "601", "603", "605", "688"].indexOf(first3) > -1) return "sh";
+    if (["00", "30"].indexOf(first2) > -1 || code.indexOf("301") === 0 || code.indexOf("399") === 0) return "sz";
+    return "sz";
+  },
+
+  getMarketTagByCode: function(stockCode, type) {
+    if (type === "crypto") return "币";
+    if (type === "fund") return "基";
+    if (type === "us") return "美";
+    if (type === "metal") return "贵";
+    if (type === "index") return this.getMarketPrefix(stockCode, type) === "sh" ? "沪" : "深";
+    if (/^\d{5}$/.test(stockCode || "")) return "港";
+    var first3 = (stockCode || "").slice(0, 3);
+    if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588", "159"].indexOf(first3) > -1) {
+      return "ETF";
+    }
+    return this.getMarketPrefix(stockCode, type) === "sh" ? "沪" : "深";
+  },
+
+  isSupportedCode: function(asset) {
+    var code = asset.code || "";
+    if (asset.type === "us") return /^[A-Z][A-Z0-9.-]{0,9}$/.test(code);
+    if (asset.type === "fund") return /^\d{6}$/.test(code);
+    if (asset.type === "crypto") return /^[A-Z0-9]{2,12}-USDT$/.test(code);
+    if (asset.type === "metal") return /^(XAU|XAG|XAUUSD|XAGUSD)$/.test(code);
+    if (asset.type === "index") return /^(000001|399001|399006|399673|000688|000300|000905|000852)$/.test(code);
+    if (/^\d{5}$/.test(code || "")) return true;
+    var first3 = code.slice(0, 3);
+    var first2 = code.slice(0, 2);
+    if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588"].indexOf(first3) > -1) return true;
+    if (first3 === "159") return true;
+    if (["600", "601", "603", "605", "688"].indexOf(first3) > -1) return true;
+    if (["00", "30"].indexOf(first2) > -1 || code.indexOf("301") === 0) return true;
+    return false;
+  },
+
+  parseTencentResponse: function(resData, stockCode, prefix) {
+    var raw = null;
+    if (resData && typeof resData === "object") {
+      raw = resData;
+    } else {
+      var jsonStr = String(resData || "");
+      if (jsonStr.indexOf("min_data=") === 0) {
+        jsonStr = jsonStr.substring("min_data=".length);
+      }
+      jsonStr = jsonStr.replace(/;$/, "");
+      raw = JSON.parse(jsonStr);
+    }
+    var key = prefix + stockCode;
+    if (!raw || !raw.data || !raw.data[key] || !raw.data[key].qt || !raw.data[key].qt[key]) return null;
+
+    var qt = raw.data[key].qt[key];
+    var name = qt[1] || stockCode;
+    var cur = parseFloat(qt[3]) || 0;
+    var pre = parseFloat(qt[4]) || 0;
+    var diff = cur - pre;
+    var rate = (diff / (pre || 1)) * 100;
+    return {
+      name: name,
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseFundResponse: function(resData, code) {
+    var jsonStr = String(resData || "").replace(/^jsonpgz\(/, "").replace(/\);?$/, "");
+    var raw = JSON.parse(jsonStr);
+    if (!raw || !raw.fundcode) return null;
+    return {
+      name: raw.name || code,
+      curPrice: parseFloat(raw.gsz || raw.dwjz) || 0,
+      changeValue: 0,
+      changeRate: parseFloat(raw.gszzl) || 0
+    };
+  },
+
+  parseCryptoResponse: function(resData, code) {
+    var raw = JSON.parse(resData || "{}");
+    if (!raw || raw.code !== "0" || !raw.data || !raw.data[0]) return null;
+    var data = raw.data[0];
+    var cur = parseFloat(data.last) || 0;
+    var open = parseFloat(data.open24h) || cur;
+    var diff = cur - open;
+    return {
+      name: code,
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: (diff / (open || 1)) * 100
+    };
+  },
+
+  getMetalSecId: function(code) {
+    var c = String(code || "").toUpperCase();
+    if (c === "XAU" || c === "XAUUSD" || c === "LONGLD" || c === "GC0" || c === "GC00Y") return "122.XAU";
+    if (c === "XAG" || c === "XAGUSD" || c === "LONSILVER" || c === "SI0" || c === "SI00Y") return "122.XAG";
+    return "";
+  },
+
+  getTencentHfSymbol: function(code) {
+    var c = String(code || "").toUpperCase();
+    if (c === "XAG" || c === "XAGUSD" || c === "LONSILVER" || c === "SI0" || c === "SI00Y") return "SI";
+    return "GC";
+  },
+
+  getMetalDisplayName: function(code) {
+    return this.getTencentHfSymbol(code) === "SI" ? "伦敦银" : "伦敦金";
+  },
+
+  buildTencentHfQuoteUrl: function(code) {
+    return "https://qt.gtimg.cn/q=hf_" + this.getTencentHfSymbol(code);
+  },
+
+  buildEastmoneyStockGetUrl: function(code) {
+    var secid = this.getMetalSecId(code);
+    if (!secid) return "";
+    return "https://push2.eastmoney.com/api/qt/stock/get?secid=" + secid + "&fields=f43,f57,f58,f60,f169,f170,f152,f12,f13&fltt=1&ut=fa5fd1943c7b386f172d6893dbfba10b";
+  },
+
+  getMetalQuoteUrls: function(code) {
+    var urls = [this.buildTencentHfQuoteUrl(code), this.buildEastmoneyStockGetUrl(code)];
+    var ulist = this.buildEastmoneyMetalQuoteUrl(code);
+    if (ulist) urls.push(ulist);
+    return urls;
+  },
+
+  parseTencentHfResponse: function(resData, code) {
+    var text = String(resData || "");
+    var sym = this.getTencentHfSymbol(code);
+    var re = new RegExp("v_hf_" + sym + '="([^"]+)"');
+    var match = text.match(re);
+    if (!match) return null;
+    var parts = match[1].split(",");
+    if (parts.length < 2) return null;
+    var cur = parseFloat(parts[0]);
+    if (isNaN(cur) || cur <= 0) return null;
+    var rate = parseFloat(parts[1]);
+    if (isNaN(rate)) rate = 0;
+    var pre = parseFloat(parts[7]);
+    if (isNaN(pre) || pre <= 0) {
+      pre = rate === 0 ? cur : cur / (1 + rate / 100);
+    }
+    var diff = cur - pre;
+    return {
+      name: parts.length > 13 ? parts[13] : this.getMetalDisplayName(code),
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseEastmoneyStockGetPayload: function(raw, code) {
+    if (!raw || raw.rc !== 0 || !raw.data) return null;
+    var d = raw.data;
+    if (typeof d.f43 === "undefined") return null;
+    var dec = parseInt(d.f152, 10);
+    if (isNaN(dec) || dec < 0) dec = 2;
+    var scale = Math.pow(10, dec);
+    var cur = parseFloat(d.f43) / scale;
+    var pre = parseFloat(d.f60) / scale;
+    if (isNaN(cur) || cur <= 0) return null;
+    if (isNaN(pre) || pre <= 0) pre = cur;
+    var diff = parseFloat(d.f169) / scale;
+    if (isNaN(diff)) diff = cur - pre;
+    var rate = parseFloat(d.f170) / 100;
+    if (isNaN(rate)) rate = (diff / (pre || 1)) * 100;
+    return {
+      name: d.f58 || this.getMetalDisplayName(code),
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseJsonResponse: function(resData) {
+    if (resData && typeof resData === "object") return resData;
+    return JSON.parse(String(resData || "{}"));
+  },
+
+  pickEastmoneyMetalRow: function(payload, code) {
+    if (!payload) return null;
+    var targetCode = String(code || "").toUpperCase();
+    var row = null;
+    if (payload.diff) {
+      var diff = payload.diff;
+      var list = [];
+      if (Array.isArray(diff)) {
+        list = diff;
+      } else if (typeof diff === "object") {
+        var keys = Object.keys(diff);
+        for (var i = 0; i < keys.length; i++) {
+          if (diff[keys[i]]) list.push(diff[keys[i]]);
+        }
+      }
+      for (var j = 0; j < list.length; j++) {
+        if (String(list[j].f12 || "").toUpperCase() === targetCode) {
+          row = list[j];
+          break;
+        }
+      }
+      if (!row && list.length > 0) row = list[0];
+    } else if (typeof payload.f2 !== "undefined") {
+      row = payload;
+    }
+    return row;
+  },
+
+  parseEastmoneyMetalPayload: function(raw, code) {
+    if (!raw || raw.rc !== 0 || !raw.data) return null;
+    var row = this.pickEastmoneyMetalRow(raw.data, code);
+    if (!row || typeof row.f2 === "undefined") return null;
+    var cur = parseFloat(row.f2) || 0;
+    var pre = parseFloat(row.f18) || parseFloat(row.f17) || cur;
+    var diff = parseFloat(row.f4);
+    if (isNaN(diff)) diff = cur - pre;
+    var rate = parseFloat(row.f3);
+    if (isNaN(rate)) rate = (diff / (pre || 1)) * 100;
+    return {
+      name: row.f14 || code,
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseMetalResponse: function(resData, code) {
+    var parsed = this.parseTencentHfResponse(resData, code);
+    if (parsed) return parsed;
+    try {
+      var raw = this.parseJsonResponse(resData);
+      parsed = this.parseEastmoneyStockGetPayload(raw, code);
+      if (parsed) return parsed;
+      return this.parseEastmoneyMetalPayload(raw, code);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  buildEastmoneyMetalQuoteUrl: function(code) {
+    var secid = this.getMetalSecId(code);
+    if (!secid) return "";
+    return "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3,f4,f17,f18,f15,f16,f13&secids=" + secid + "&ut=fa5fd1943c7b386f172d6893dbfba10b";
+  },
+
+  buildQuoteUrl: function(asset) {
+    if (asset.type === "fund") {
+      return "https://fundgz.1234567.com.cn/js/" + asset.code + ".js?rt=" + Date.now();
+    }
+    if (asset.type === "crypto") {
+      return "https://www.okx.com/api/v5/market/ticker?instId=" + asset.code;
+    }
+    if (asset.type === "metal") {
+      return this.buildTencentHfQuoteUrl(asset.code);
+    }
+    if (asset.type === "us") {
+      return "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data&code=us" + asset.code + "&r=" + Math.random();
+    }
+    var prefix = this.getMarketPrefix(asset.code, asset.type);
+    return "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data&code=" + prefix + asset.code + "&r=" + Math.random();
+  },
+
+  parseQuoteResponse: function(resData, asset) {
+    if (asset.type === "fund") return this.parseFundResponse(resData, asset.code);
+    if (asset.type === "crypto") return this.parseCryptoResponse(resData, asset.code);
+    if (asset.type === "metal") return this.parseMetalResponse(resData, asset.code);
+    return this.parseTencentResponse(resData, asset.code, this.getMarketPrefix(asset.code, asset.type));
+  },
+
+  getStoredData: function(done) {
+    storage.get({
+      key: STORAGE_KEY,
+      default: "",
+      success: function(value) {
+        var parsed = {};
+        try {
+          parsed = value ? JSON.parse(value) : {};
+        } catch (e) {
+          parsed = {};
+        }
+        done(parsed);
+      },
+      fail: function() {
+        done({});
+      }
+    });
+  },
+
+  saveStoredData: function(data) {
+    storage.set({
+      key: STORAGE_KEY,
+      value: JSON.stringify(data || {})
+    });
+  },
+
+  hasSameAsset: function(stocks, asset) {
+    var key = asset.type + ":" + String(asset.code).toUpperCase();
+    for (var i = 0; i < stocks.length; i++) {
+      var type = stocks[i].type || (/^[A-Za-z]/.test(stocks[i].code || "") ? "us" : "stock");
+      var itemKey = type + ":" + String(stocks[i].code).toUpperCase();
+      if (itemKey === key) return true;
+    }
+    return false;
+  },
+
+  confirmAdd: function() {
+    if (this.isAdding) return;
+    var asset = this.normalizeInputCode(this.codeInput);
+    if (!asset.code || !this.isSupportedCode(asset)) {
+      prompt.showToast({
+        message: "支持A股/港/美/指数/基金/币/贵金属",
+        duration: 1500
+      });
+      return;
+    }
+
+    this.getStoredData(function(data) {
+      var stocks = Array.isArray(data.stocks) ? data.stocks : [];
+      if (this.hasSameAsset(stocks, asset)) {
+        prompt.showToast({
+          message: "该标的已在自选中",
+          duration: 1200
+        });
+        return;
+      }
+
+      this.isAdding = true;
+      if (asset.type === "metal") {
+        this.fetchMetalQuoteAndAdd(asset, stocks, data);
+        return;
+      }
+      this.fetchQuoteAndAdd(asset, stocks, data, this.buildQuoteUrl(asset));
+    }.bind(this));
+  },
+
+  finishAddStock: function(asset, parsed, stocks, data) {
+    stocks.push({
+      code: asset.code,
+      type: asset.type,
+      name: parsed.name || asset.code,
+      market: this.getMarketTagByCode(asset.code, asset.type),
+      alertRate: null,
+      alertBaseRate: null,
+      curPrice: parsed.curPrice || 0,
+      changeValue: parsed.changeValue || 0,
+      changeRate: parsed.changeRate || 0,
+      lastFetchedAt: Date.now(),
+      addedAt: Date.now()
+    });
+    data.stocks = stocks;
+    if (!data.sortMode) data.sortMode = "change";
+    this.saveStoredData(data);
+    prompt.showToast({
+      message: "添加成功",
+      duration: 1000
+    });
+    setTimeout(function() {
+      router.back();
+    }, 250);
+  },
+
+  fetchQuoteAndAdd: function(asset, stocks, data, url) {
+    fetch.fetch({
+      url: url,
+      method: "GET",
+      success: function(res) {
+        this.isAdding = false;
+        var parsed = null;
+        try {
+          parsed = this.parseQuoteResponse(res.data, asset);
+        } catch (e) {
+          parsed = null;
+        }
+        if (!parsed) {
+          prompt.showToast({
+            message: "代码无效或暂不可用",
+            duration: 1200
+          });
+          return;
+        }
+        this.finishAddStock(asset, parsed, stocks, data);
+      }.bind(this),
+      fail: function() {
+        this.isAdding = false;
+        prompt.showToast({
+          message: "网络异常，请稍后重试",
+          duration: 1200
+        });
+      }.bind(this)
+    });
+  },
+
+  fetchMetalQuoteAndAdd: function(asset, stocks, data) {
+    var urls = this.getMetalQuoteUrls(asset.code);
+    var idx = 0;
+    var tryNext = function() {
+      if (idx >= urls.length) {
+        this.isAdding = false;
+        prompt.showToast({
+          message: "代码无效或暂不可用",
+          duration: 1200
+        });
+        return;
+      }
+      fetch.fetch({
+        url: urls[idx],
+        method: "GET",
+        success: function(res) {
+          var parsed = null;
+          try {
+            parsed = this.parseMetalResponse(res.data, asset.code);
+          } catch (e) {
+            parsed = null;
+          }
+          if (parsed) {
+            this.isAdding = false;
+            this.finishAddStock(asset, parsed, stocks, data);
+            return;
+          }
+          idx++;
+          tryNext();
+        }.bind(this),
+        fail: function() {
+          idx++;
+          tryNext();
+        }.bind(this)
+      });
+    }.bind(this);
+    tryNext();
+  }
+};
+</script>
+
+<style>
+.add-page {
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 8px;
+  padding-bottom: 14px;
+  box-sizing: border-box;
+}
+
+.top-bar {
+  width: 90%;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.top-cell {
+  height: 42px;
+  background-color: #101214;
+  border-radius: 10px;
+  border-width: 2px;
+  border-color: #2f3540;
+  justify-content: center;
+  align-items: center;
+}
+
+.back-cell {
+  width: 48px;
+}
+
+.title-cell {
+  width: 150px;
+  height: 42px;
+  justify-content: center;
+  align-items: center;
+}
+
+.back-btn {
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.title {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.mode-btn {
+  width: 58px;
+}
+
+.mode-text {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.input-box {
+  width: 90%;
+  margin-top: 12px;
+  background-color: #101214;
+  border-radius: 12px;
+  padding: 10px 8px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-value {
+  color: #ffffff;
+  font-size: 28px;
+  letter-spacing: 1px;
+  font-weight: bold;
+  width: 82%;
+  text-align: center;
+}
+
+.input-delete {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background-color: #1f232a;
+  justify-content: center;
+  align-items: center;
+}
+
+.input-delete-text {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.digit-grid {
+  width: 90%;
+  margin-top: 10px;
+  background-color: #101214;
+  border-radius: 12px;
+  padding: 6px;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.alpha-grid {
+  width: 90%;
+  margin-top: 10px;
+  background-color: #101214;
+  border-radius: 12px;
+  padding: 6px;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.alpha-scroll {
+  width: 100%;
+  height: 178px;
+}
+
+.alpha-board {
+  width: 650px;
+  flex-direction: column;
+}
+
+.grid-row {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  align-items: stretch;
+  margin-bottom: 6px;
+}
+
+.grid-row-last {
+  margin-bottom: 0;
+}
+
+.key-btn {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  height: 55px;
+  margin-left: 4px;
+  margin-right: 4px;
+  border-radius: 8px;
+  background-color: #1f232a;
+  justify-content: center;
+  align-items: center;
+}
+
+.key-fl {
+  margin-left: 0;
+}
+
+.key-fr {
+  margin-right: 0;
+}
+
+.key-action {
+  background-color: #1f232a;
+}
+
+.key-text {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.alpha-row {
+  width: 100%;
+  flex-direction: row;
+  align-items: stretch;
+  margin-bottom: 6px;
+}
+
+.alpha-row-mid {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.alpha-row-last {
+  padding-left: 42px;
+  padding-right: 42px;
+  margin-bottom: 0;
+}
+
+.alpha-key {
+  width: 60px;
+  height: 54px;
+  margin-right: 5px;
+  border-radius: 8px;
+  background-color: #1f232a;
+  justify-content: center;
+  align-items: center;
+}
+
+.alpha-key-last {
+  margin-right: 0;
+}
+
+.alpha-text {
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.confirm-btn {
+  width: 90%;
+  height: 48px;
+  border-radius: 10px;
+  background-color: #287cff;
+  justify-content: center;
+  align-items: center;
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.confirm-text {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+}
+</style>

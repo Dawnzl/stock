@@ -1,0 +1,2383 @@
+<template>
+  <div class="combined-page" @swipe="handleSwipe" @click="handleScreenTap">
+    <!-- 股票头部信息 -->
+    <div class="stock-header">
+      <text class="stock-name" if="{{ !isUsStock }}">{{ stockName }} ({{ stockCode }})</text>
+      <text class="stock-name" if="{{ isUsStock }}">{{ stockName }}（{{ usTicker }}）</text>
+      <div class="stock-price-wrap {{ isUsStock ? 'us-stock-price-wrap' : '' }}">
+        <text class="stock-price {{ isUsStock ? 'us-stock-price' : '' }}" style="color: {{ priceColor }}">{{ curPrice }}</text>
+        <text class="stock-change {{ isUsStock ? 'us-stock-change' : '' }}" style="color: {{ priceColor }}">{{ changeValue }}</text>
+        <text class="stock-change-rate {{ isUsStock ? 'us-stock-change-rate' : '' }}" style="color: {{ priceColor }}">({{ changeRateDisplay }}%)</text>
+      </div>
+    </div>
+
+    <!-- 折线图区域 -->
+    <div class="line-section">
+      <stack class="line-stack-wrap" if="{{ !showQuoteBoard && !isUsStock }}">
+        <div class="line-top-wrap">
+          <div class="line-chart-wrap">
+            <chart
+              class="line-chart"
+              type="line"
+              id="lineChart"
+              options="{{ lineOpts }}"
+              datasets="{{ lineData }}"
+            ></chart>
+          </div>
+          <div class="line-time-wrap">
+            <text class="line-times" for="{{ times }}">{{ $item }}</text>
+          </div>
+        </div>
+      </stack>
+﻿      <div class="quote-board us-quote-board" if="{{ isUsStock }}">
+        <div class="quote-section us-quote-section">
+          <text class="box-title">关键数据</text>
+          <div class="quote-row us-quote-row" style="height: {{ usQuoteRowHeight }}">
+            <text class="quote-label us-quote-label">昨收</text>
+            <text class="quote-value us-quote-value">{{ preCloseText }}</text>
+            <text class="quote-label quote-mid-label us-quote-label">开盘</text>
+            <text class="quote-value us-quote-value">{{ openPriceText }}</text>
+          </div>
+          <div class="quote-row us-quote-row" style="height: {{ usQuoteRowHeight }}">
+            <text class="quote-label us-quote-label">最高</text>
+            <text class="quote-value us-quote-value">{{ highPriceText }}</text>
+            <text class="quote-label quote-mid-label us-quote-label">最低</text>
+            <text class="quote-value us-quote-value">{{ lowPriceText }}</text>
+          </div>
+          <div class="quote-row us-quote-row" style="height: {{ usQuoteRowHeight }}">
+            <text class="quote-label us-quote-label">成交量</text>
+            <text class="quote-value us-quote-value">{{ volumeText }}</text>
+            <text class="quote-label quote-mid-label us-quote-label">总市值</text>
+            <text class="quote-value us-quote-value">{{ marketCapText }}</text>
+          </div>
+          <div class="quote-row us-quote-row" style="height: {{ usQuoteRowHeight }}">
+            <text class="quote-label us-quote-label">52周高</text>
+            <text class="quote-value us-quote-value">{{ week52HighText }}</text>
+            <text class="quote-label quote-mid-label us-quote-label">52周低</text>
+            <text class="quote-value us-quote-value">{{ week52LowText }}</text>
+          </div>
+        </div>
+      </div>
+
+      <div class="quote-board" if="{{ showQuoteBoard && !isUsStock }}">
+        <div class="quote-section">
+          <text class="box-title">关键数据</text>
+          <div class="quote-row" style="height: {{ keyDataRowHeight }}">
+            <text class="quote-label">昨收</text>
+            <text class="quote-value">{{ preCloseText }}</text>
+            <text class="quote-label quote-mid-label">开盘</text>
+            <text class="quote-value">{{ openPriceText }}</text>
+          </div>
+          <div class="quote-row" style="height: {{ keyDataRowHeight }}">
+            <text class="quote-label">最高</text>
+            <text class="quote-value">{{ highPriceText }}</text>
+            <text class="quote-label quote-mid-label">最低</text>
+            <text class="quote-value">{{ lowPriceText }}</text>
+          </div>
+          <div class="quote-row" style="height: {{ keyDataRowHeight }}">
+            <text class="quote-label">成交量</text>
+            <text class="quote-value">{{ volumeText }}</text>
+            <text class="quote-label quote-mid-label">成交额</text>
+            <text class="quote-value">{{ amountText }}</text>
+          </div>
+          <div class="quote-row" style="height: {{ keyDataRowHeight }}">
+            <text class="quote-label">换手</text>
+            <text class="quote-value">{{ turnoverText }}</text>
+            <text class="quote-label quote-mid-label">量比</text>
+            <text class="quote-value">{{ volumeRatioText }}</text>
+          </div>
+          <div class="quote-row" style="height: {{ keyDataRowHeight }}">
+            <text class="quote-label">振幅</text>
+            <text class="quote-value amp-value">{{ amplitudeText }}</text>
+            <text class="quote-label quote-mid-label">流通值</text>
+            <text class="quote-value">{{ circulationText }}</text>
+          </div>
+          <div class="quote-row" style="height: {{ keyDataRowHeight }}">
+            <text class="quote-label">涨停</text>
+            <text class="quote-value up-value">{{ limitUpText }}</text>
+            <text class="quote-label quote-mid-label">跌停</text>
+            <text class="quote-value down-value">{{ limitDownText }}</text>
+          </div>
+        </div>
+        <div class="quote-section depth-section" if="{{ showDepthSection }}">
+          <text class="box-title">{{ depthTitle }}</text>
+          <div class="quote-row depth-simple-row" for="{{ depthRows }}" style="height: {{ quoteRowHeight }}; min-height: {{ quoteRowHeight }}">
+            <text class="depth-col depth-col-label">{{ $item.buyLabel }}</text>
+            <text class="depth-col depth-col-price up-value">{{ $item.buyPrice }}</text>
+            <text class="depth-col depth-col-qty" if="{{ showDepthVolume }}">{{ $item.buyVolumeText }}</text>
+            <text class="depth-col depth-col-label">{{ $item.sellLabel }}</text>
+            <text class="depth-col depth-col-price down-value">{{ $item.sellPrice }}</text>
+            <text class="depth-col depth-col-qty" if="{{ showDepthVolume }}">{{ $item.sellVolumeText }}</text>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部功能按钮区 -->
+    <div class="bottom-buttons" if="{{ isUsStock || !showQuoteBoard }}">
+      <div class="btn-k" @click="toggleAvgLine">
+        <text class="btn-text">均</text>
+      </div>
+
+      <div class="btn-alert" @click="toggleAlertPanel">
+        <text class="btn-text">{{ alertText }}</text>
+      </div>
+
+      <div class="btn-delete" @click="showDeleteConfirm">
+        <text class="btn-text">删</text>
+      </div>
+    </div>
+
+    <!-- 提醒调节面板：整行下方 -->
+    <div class="alert-adjust-wrap" if="{{ showAlertPanel && (isUsStock || !showQuoteBoard) }}">
+      <div class="alert-btn" @click="minusRate">
+        <text class="alert-btn-font">-</text>
+      </div>
+      <text class="alert-rate-show">{{ tempAlertRate.toFixed(2) }}%</text>
+      <div class="alert-btn" @click="plusRate">
+        <text class="alert-btn-font">+</text>
+      </div>
+      <div class="alert-confirm" @click="confirmAlertRate">
+        <text class="alert-confirm-font">确认</text>
+      </div>
+    </div>
+
+    <!-- 自定义删除确认弹窗（修复版） -->
+    <div class="delete-confirm-mask" if="{{ showDeleteMask }}" @click="hideDeleteConfirm">
+      <!-- 移除 @click.stop，改用事件处理函数阻止冒泡 -->
+      <div class="delete-confirm-box" @click="stopPropagation">
+        <text class="delete-confirm-title">删除确认</text>
+        <text class="delete-confirm-content">确定要删除 {{ stockName }}({{ stockCode }}) 吗？</text>
+        <div class="delete-confirm-btns">
+          <div class="delete-cancel-btn" @click="hideDeleteConfirm">
+            <text class="btn-font">取消</text>
+          </div>
+          <div class="delete-ok-btn" @click="deleteStock">
+            <text class="btn-font">确认</text>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+  import router from "@system.router";
+  import prompt from '@system.prompt'; // 弹窗模块
+  import vibrator from '@system.vibrator'; // 振动模块
+  import storage from "@system.storage";
+  import brightness from "@system.brightness";
+  const fetch = require('@system.fetch');
+  const STORAGE_KEY = "stock_watch_data";
+
+  export default {
+    private: {
+      // 股票基础信息
+      stockCode: "000001",
+      stockType: "stock",
+      isUsStock: false,
+      usTicker: "",
+      marketCapText: "--",
+      week52HighText: "--",
+      week52LowText: "--",
+      stockName: "—",
+      curPrice: "—",
+      changeValue: "",
+      changeRate: "",
+      changeRateDisplay: "0.00",
+      priceColor: "#ff0000",
+      curTime: "-",
+      stockDate: "",
+      currentLastFetchedAt: 0,
+      // 新增：提醒点基准值（设置提醒点时的涨跌幅）
+      alertBaseRate: null, 
+      times: ["09:30", "11:30", "15:00"],
+
+      // 0轴线控制
+      showZeroAxis: false,
+      showAvgLine: false,
+      lastTapTs: 0,
+      showQuoteBoard: false,
+      keepScreenOn: true,
+
+      // 右滑显示的基础行情信息
+      preCloseText: "--",
+      openPriceText: "--",
+      highPriceText: "--",
+      lowPriceText: "--",
+      volumeText: "--",
+      amountText: "--",
+      turnoverText: "--",
+      volumeRatioText: "--",
+      circulationText: "--",
+      amplitudeText: "--",
+      limitUpText: "--",
+      limitDownText: "--",
+      depthTitle: "盘口三档",
+      showDepthSection: true,
+      showDepthVolume: true,
+      quoteRowHeight: "30px",
+      keyDataRowHeight: "30px",
+      usQuoteRowHeight: "38px",
+      depthRows: [],
+
+      // 提醒功能（极简版）
+      showAlertPanel: false,
+      tempAlertRate: 0.00,
+      alertRate: null,
+      alertText: "提醒点",
+
+      // 自选股
+      watchList: [],
+      currentStockIndex: 0,
+
+      // 图表数据
+      lineData: [
+        {
+          strokeColor: "transparent",
+          fillColor: "transparent",
+          data: [],
+          gradient: false,
+          showSymbol: false,
+          symbolSize: 0,
+          lineStyle: { width: "1px" },
+          zIndex: 1
+        },
+        {
+          strokeColor: "transparent",
+          fillColor: "transparent",
+          data: [],
+          gradient: false,
+          showSymbol: false,
+          symbolSize: 0,
+          lineStyle: { width: "2px" },
+          zIndex: 2
+        },
+        {
+          strokeColor: "#ff0000",
+          fillColor: "rgba(255,0,0,0.12)",
+          data: [],
+          gradient: false,
+          showSymbol: false,
+          symbolSize: 0.5,
+          lineStyle: { width: "3px" },
+          zIndex: 3
+        }
+      ],
+      lastZeroData: [],
+      lastAvgData: [],
+      lineOpts: {
+        xAxis: { min: 0, max: 120, display: false, axisTick: 121 },
+        yAxis: { min: 0, max: 1000, display: false, axisTick: 0 },
+        series: {
+          lineStyle: { width: "3px" },
+          loop: { margin: "0" },
+          headPoint: { show: false, size: 0 },
+          topPoint: { show: false, size: 0 },
+          bottomPoint: { show: false, size: 0 }
+        }
+      },
+      _readTimer: null,
+      timeoutTimer: null,
+      _persistTimer: null,
+      _storedDataCache: null,
+      _lastMetaSignature: "",
+      _isFetching: false,
+      _hasMinuteData: false,
+      _minuteDataKey: "",
+
+      // 自定义删除确认弹窗控制
+      showDeleteMask: false
+    },
+
+    onInit: function() {
+      var routeCode = this.extractRouteStockCode();
+      var routeType = this.extractRouteStockType();
+      if (routeCode) {
+        this.stockCode = routeCode;
+      }
+      if (routeType) {
+        this.stockType = routeType;
+      }
+      this.syncQuoteBoardLayout();
+      this.isUsStock = this.stockType === "us";
+      if (this.isUsStock) {
+        this.showQuoteBoard = true;
+        this.usQuoteRowHeight = "38px";
+        this.syncChangeRateDisplay();
+      }
+      this.applyKeepScreenOnSetting();
+      this.loadWatchContext(function() {
+        this.fetchStockData();
+      }.bind(this));
+      this.clearReadTimer();
+      this._readTimer = setInterval(function() {
+        this.fetchStockData();
+      }.bind(this), 5000);
+      this.getDate();
+    },
+
+    onDestroy: function() {
+      this.clearReadTimer();
+      this.clearTimeoutTimer();
+      this.clearPersistTimer();
+      this.setKeepScreenOn(false);
+    },
+
+    clearReadTimer: function() {
+      if (this._readTimer) {
+        clearInterval(this._readTimer);
+        this._readTimer = null;
+      }
+    },
+
+    clearTimeoutTimer: function() {
+      if (this.timeoutTimer) {
+        clearTimeout(this.timeoutTimer);
+        this.timeoutTimer = null;
+      }
+    },
+
+    clearPersistTimer: function() {
+      if (this._persistTimer) {
+        clearTimeout(this._persistTimer);
+        this._persistTimer = null;
+      }
+    },
+
+    extractRouteStockCode: function() {
+      var fromPage = this.$page || {};
+      var fromParams = fromPage.params || {};
+      var fromQuery = fromPage.query || {};
+      var fromData = fromPage.data || {};
+      return fromParams.stockCode || fromQuery.stockCode || fromData.stockCode || "";
+    },
+
+    extractRouteStockType: function() {
+      var fromPage = this.$page || {};
+      var fromParams = fromPage.params || {};
+      var fromQuery = fromPage.query || {};
+      var fromData = fromPage.data || {};
+      return fromParams.stockType || fromQuery.stockType || fromData.stockType || "";
+    },
+
+    setKeepScreenOn: function(on) {
+      try {
+        brightness.setKeepScreenOn({
+          keepScreenOn: !!on
+        });
+      } catch (e) {}
+    },
+
+    applyKeepScreenOnSetting: function() {
+      this.getStoredData(function(data) {
+        this.keepScreenOn = typeof data.keepScreenOn === "boolean" ? data.keepScreenOn : true;
+        this.setKeepScreenOn(this.keepScreenOn);
+      }.bind(this));
+    },
+
+    getDefaultStocks: function() {
+      return [
+        { code: "000001", name: "上证指数", market: "沪", alertRate: null }
+      ];
+    },
+
+    normalizeType: function(item) {
+      if (item && item.type) return item.type;
+      var code = String(item && item.code ? item.code : "").toUpperCase();
+      if (/^(XAU|XAG|XAUUSD|XAGUSD)$/.test(code)) return "metal";
+      if (/^[A-Za-z][A-Za-z0-9.-]{0,9}$/.test(code)) return "us";
+      return "stock";
+    },
+
+    getAssetKey: function(item) {
+      var type = this.normalizeType(item);
+      return type + ":" + String(item && item.code ? item.code : "").toUpperCase();
+    },
+
+    dedupeStocks: function(stocks) {
+      var seen = {};
+      var list = [];
+      for (var i = 0; i < (stocks || []).length; i++) {
+        var item = stocks[i] || {};
+        if (!item.code) continue;
+        item.type = this.normalizeType(item);
+        var key = this.getAssetKey(item);
+        if (seen[key]) continue;
+        seen[key] = true;
+        list.push(item);
+      }
+      return list;
+    },
+
+    getMarketTagByCode: function(stockCode, type) {
+      if (type === "crypto") return "币";
+      if (type === "fund") return "基";
+      if (type === "metal") return "贵";
+      if (type === "us" || /^[A-Za-z][A-Za-z0-9.-]{0,9}$/.test(stockCode || "")) return "美";
+      if (/^\d{5}$/.test(stockCode || "")) return "港";
+      var first3 = (stockCode || "").slice(0, 3);
+      if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588", "159"].indexOf(first3) > -1) {
+        return "ETF";
+      }
+      return this.getMarketPrefix(stockCode, type) === "sh" ? "沪" : "深";
+    },
+
+    /** 与首页 index 的 sortAndRender 使用相同排序规则 */
+    buildSortedWatchCodesFromData: function(data) {
+      var sortMode = data.sortMode === "sequence" ? "sequence" : "change";
+      var sortDirection = "desc";
+      if (typeof data.sortDirection === "string") {
+        sortDirection = data.sortDirection === "asc" ? "asc" : "desc";
+      } else if (typeof data.sortDesc === "boolean") {
+        sortDirection = data.sortDesc ? "desc" : "asc";
+      }
+      var base = Array.isArray(data.stocks) && data.stocks.length > 0 ? data.stocks : this.getDefaultStocks();
+      var normalized = base.map(function(item, index) {
+        var type = this.normalizeType(item);
+        return {
+          code: item.code,
+          type: type,
+          changeRate: typeof item.changeRate === "number" ? item.changeRate : 0,
+          addedAt: typeof item.addedAt === "number" ? item.addedAt : index
+        };
+      }.bind(this));
+      var sorted = normalized.slice().sort(function(a, b) {
+        if (sortMode === "sequence") {
+          return sortDirection === "asc"
+            ? (a.addedAt || 0) - (b.addedAt || 0)
+            : (b.addedAt || 0) - (a.addedAt || 0);
+        }
+        var delta = sortDirection === "asc"
+          ? (a.changeRate || 0) - (b.changeRate || 0)
+          : (b.changeRate || 0) - (a.changeRate || 0);
+        if (delta !== 0) return delta;
+        return sortDirection === "asc"
+          ? (a.addedAt || 0) - (b.addedAt || 0)
+          : (b.addedAt || 0) - (a.addedAt || 0);
+      });
+      return sorted.map(function(s) {
+        return {
+          code: s.code,
+          type: s.type || "stock"
+        };
+      });
+    },
+
+    getCurrentAssetKey: function() {
+      return this.getAssetKey({ code: this.stockCode, type: this.stockType });
+    },
+
+    prepareStockSwitch: function() {
+      this._hasMinuteData = false;
+      this._minuteDataKey = "";
+      this._isFetching = false;
+      this.isUsStock = this.stockType === "us";
+      this.syncQuoteBoardLayout();
+      this.showQuoteBoard = this.isUsStock;
+      var len = 121;
+      this.lineData[0].data = new Array(len).fill(null);
+      this.lineData[0].strokeColor = this.showZeroAxis ? "#cccccc" : "transparent";
+      this.lineData[1].data = new Array(len).fill(null);
+      this.lineData[1].strokeColor = this.showAvgLine ? "#f5c542" : "transparent";
+      this.lineData[2].data = new Array(len).fill(null);
+      this.lineData[2].strokeColor = "#ff0000";
+      this.lastZeroData = new Array(len).fill(null);
+      this.lastAvgData = new Array(len).fill(null);
+      this.applyLineLayerOrder();
+      this.refreshLineData();
+    },
+
+    buildTencentUsMinuteUrl: function() {
+      var code = String(this.stockCode || "").toUpperCase();
+      return "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data&code=us" + code + "&r=" + Math.random();
+    },
+
+    getMetalSecId: function(code) {
+      var c = String(code || this.stockCode || "").toUpperCase();
+      if (c === "XAU" || c === "XAUUSD" || c === "LONGLD" || c === "GC0" || c === "GC00Y") return "122.XAU";
+      if (c === "XAG" || c === "XAGUSD" || c === "LONSILVER" || c === "SI0" || c === "SI00Y") return "122.XAG";
+      return "";
+    },
+
+    getTencentHfSymbol: function(code) {
+      var c = String(code || this.stockCode || "").toUpperCase();
+      if (c === "XAG" || c === "XAGUSD" || c === "LONSILVER" || c === "SI0" || c === "SI00Y") return "SI";
+      return "GC";
+    },
+
+    getMetalDisplayName: function(code) {
+      return this.getTencentHfSymbol(code) === "SI" ? "伦敦银" : "伦敦金";
+    },
+
+    buildTencentHfQuoteUrl: function(code) {
+      return "https://qt.gtimg.cn/q=hf_" + this.getTencentHfSymbol(code);
+    },
+
+    buildEastmoneyStockGetUrl: function(code) {
+      var secid = this.getMetalSecId(code);
+      if (!secid) return "";
+      return "https://push2.eastmoney.com/api/qt/stock/get?secid=" + secid + "&fields=f43,f57,f58,f60,f169,f170,f152,f12,f13&fltt=1&ut=fa5fd1943c7b386f172d6893dbfba10b";
+    },
+
+    getMetalQuoteUrls: function(code) {
+      var urls = [this.buildTencentHfQuoteUrl(code), this.buildEastmoneyStockGetUrl(code)];
+      var ulist = this.buildEastmoneyMetalQuoteUrl(code);
+      if (ulist) urls.push(ulist);
+      return urls;
+    },
+
+    parseTencentHfResponse: function(resData, code) {
+      var text = String(resData || "");
+      var sym = this.getTencentHfSymbol(code);
+      var re = new RegExp("v_hf_" + sym + '="([^"]+)"');
+      var match = text.match(re);
+      if (!match) return null;
+      var parts = match[1].split(",");
+      if (parts.length < 2) return null;
+      var cur = parseFloat(parts[0]);
+      if (isNaN(cur) || cur <= 0) return null;
+      var rate = parseFloat(parts[1]);
+      if (isNaN(rate)) rate = 0;
+      var pre = parseFloat(parts[7]);
+      if (isNaN(pre) || pre <= 0) {
+        pre = rate === 0 ? cur : cur / (1 + rate / 100);
+      }
+      var diff = cur - pre;
+      return {
+        name: parts.length > 13 ? parts[13] : this.getMetalDisplayName(code),
+        curPrice: cur,
+        changeValue: diff,
+        changeRate: rate,
+        preClose: pre
+      };
+    },
+
+    parseEastmoneyStockGetPayload: function(raw, code) {
+      if (!raw || raw.rc !== 0 || !raw.data) return null;
+      var d = raw.data;
+      if (typeof d.f43 === "undefined") return null;
+      var dec = parseInt(d.f152, 10);
+      if (isNaN(dec) || dec < 0) dec = 2;
+      var scale = Math.pow(10, dec);
+      var cur = parseFloat(d.f43) / scale;
+      var pre = parseFloat(d.f60) / scale;
+      if (isNaN(cur) || cur <= 0) return null;
+      if (isNaN(pre) || pre <= 0) pre = cur;
+      var diff = parseFloat(d.f169) / scale;
+      if (isNaN(diff)) diff = cur - pre;
+      var rate = parseFloat(d.f170) / 100;
+      if (isNaN(rate)) rate = (diff / (pre || 1)) * 100;
+      return {
+        name: d.f58 || this.getMetalDisplayName(code),
+        curPrice: cur,
+        changeValue: diff,
+        changeRate: rate,
+        preClose: pre
+      };
+    },
+
+    parseMetalQuoteResponse: function(resData, code) {
+      var parsed = this.parseTencentHfResponse(resData, code);
+      if (parsed) return parsed;
+      try {
+        var raw = this.parseTencentRawResponse(resData);
+        parsed = this.parseEastmoneyStockGetPayload(raw, code);
+        if (parsed) return parsed;
+        parsed = this.parseEastmoneyMetalPayload(raw, code);
+        return parsed;
+      } catch (e) {
+        return null;
+      }
+    },
+
+    buildMetalTrendUrl: function() {
+      var secid = this.getMetalSecId(this.stockCode);
+      return "https://push2his.eastmoney.com/api/qt/stock/trends2/get?secid=" + secid + "&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f53,f54,f55,f56,f57,f58&iscr=0&ndays=1&ut=fa5fd1943c7b386f172d6893dbfba10b";
+    },
+
+    buildEastmoneyMetalQuoteUrl: function(code) {
+      var secid = this.getMetalSecId(code || this.stockCode);
+      if (!secid) return "";
+      return "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3,f4,f17,f18,f15,f16,f13&secids=" + secid + "&ut=fa5fd1943c7b386f172d6893dbfba10b";
+    },
+
+    pickEastmoneyMetalRow: function(payload, code) {
+      if (!payload) return null;
+      var targetCode = String(code || this.stockCode || "").toUpperCase();
+      var row = null;
+      if (payload.diff) {
+        var diff = payload.diff;
+        var list = [];
+        if (Array.isArray(diff)) {
+          list = diff;
+        } else if (typeof diff === "object") {
+          var keys = Object.keys(diff);
+          for (var i = 0; i < keys.length; i++) {
+            if (diff[keys[i]]) list.push(diff[keys[i]]);
+          }
+        }
+        for (var j = 0; j < list.length; j++) {
+          if (String(list[j].f12 || "").toUpperCase() === targetCode) {
+            row = list[j];
+            break;
+          }
+        }
+        if (!row && list.length > 0) row = list[0];
+      } else if (typeof payload.f2 !== "undefined") {
+        row = payload;
+      }
+      return row;
+    },
+
+    parseEastmoneyMetalPayload: function(raw, code) {
+      if (!raw || raw.rc !== 0 || !raw.data) return null;
+      var row = this.pickEastmoneyMetalRow(raw.data, code);
+      if (!row || typeof row.f2 === "undefined") return null;
+      var cur = parseFloat(row.f2) || 0;
+      var pre = parseFloat(row.f18) || parseFloat(row.f17) || cur;
+      var diff = parseFloat(row.f4);
+      if (isNaN(diff)) diff = cur - pre;
+      var rate = parseFloat(row.f3);
+      if (isNaN(rate)) rate = (diff / (pre || 1)) * 100;
+      return {
+        name: row.f14 || code || this.stockCode,
+        curPrice: cur,
+        changeValue: diff,
+        changeRate: rate,
+        preClose: pre
+      };
+    },
+
+    applyMetalQuoteOnly: function(parsed) {
+      this.stockName = parsed.name || this.stockCode;
+      this.curPrice = parsed.curPrice.toFixed(2);
+      this.changeValue = parsed.changeValue.toFixed(2);
+      this.changeRate = parsed.changeRate.toFixed(2);
+      this.syncChangeRateDisplay();
+      this.priceColor = parseFloat(this.changeValue) >= 0 ? "#ff0000" : "#00cc00";
+      this.currentLastFetchedAt = Date.now();
+      this.times = ["00:00", "12:00", "24:00"];
+      var preClose = parsed.preClose || parsed.curPrice;
+      this.applyPriceSeriesToChart([preClose, parsed.curPrice], preClose);
+      this.persistCurrentStockMeta();
+    },
+
+    buildMinuteQuoteUrl: function() {
+      if (this.stockType === "fund" || this.stockType === "crypto") {
+        return this.buildSimpleQuoteUrl();
+      }
+      if (this.stockType === "metal") {
+        return this.buildMetalTrendUrl();
+      }
+      if (this.stockType === "us") {
+        return this.buildTencentUsMinuteUrl();
+      }
+      var prefix = this.getMarketPrefix(this.stockCode, this.stockType);
+      return "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data&code=" + prefix + this.stockCode + "&r=" + Math.random();
+    },
+
+    parseTencentRawResponse: function(resData) {
+      if (resData && typeof resData === "object") {
+        return resData;
+      }
+      var jsonStr = String(resData || "");
+      if (jsonStr.indexOf("min_data=") === 0) {
+        jsonStr = jsonStr.substring("min_data=".length);
+      }
+      jsonStr = jsonStr.replace(/;$/, "");
+      return JSON.parse(jsonStr);
+    },
+
+    getStoredData: function(done) {
+      storage.get({
+        key: STORAGE_KEY,
+        default: "",
+        success: function(value) {
+          var parsed = {};
+          try {
+            parsed = value ? JSON.parse(value) : {};
+          } catch (e) {
+            parsed = {};
+          }
+          done(parsed);
+        },
+        fail: function() {
+          done({});
+        }
+      });
+    },
+
+    saveStoredData: function(data) {
+      data = data || {};
+      data.stocks = this.dedupeStocks(Array.isArray(data.stocks) ? data.stocks : []);
+      storage.set({
+        key: STORAGE_KEY,
+        value: JSON.stringify(data)
+      });
+    },
+
+    loadWatchContext: function(done) {
+      this.getStoredData(function(data) {
+        this._storedDataCache = data || {};
+        this.keepScreenOn = typeof data.keepScreenOn === "boolean" ? data.keepScreenOn : true;
+        this.setKeepScreenOn(this.keepScreenOn);
+        var stocks = this.dedupeStocks(Array.isArray(data.stocks) ? data.stocks : []);
+        data.stocks = stocks;
+        this.watchList = this.buildSortedWatchCodesFromData(data);
+
+        if (this.watchList.length === 0) {
+          this.watchList = [{ code: this.stockCode, type: this.stockType }];
+        }
+        var targetKey = this.getAssetKey({ code: this.stockCode, type: this.stockType });
+        var found = -1;
+        for (var wi = 0; wi < this.watchList.length; wi++) {
+          if (this.getAssetKey(this.watchList[wi]) === targetKey) {
+            found = wi;
+            break;
+          }
+        }
+        this.currentStockIndex = found > -1 ? found : 0;
+        if (found === -1) {
+          this.stockCode = this.watchList[0].code;
+          this.stockType = this.watchList[0].type || "stock";
+        }
+
+        var cur = null;
+        for (var i = 0; i < stocks.length; i++) {
+          if (this.getAssetKey(stocks[i]) === this.getAssetKey({ code: this.stockCode, type: this.stockType })) {
+            cur = stocks[i];
+            break;
+          }
+        }
+        // 先用本地缓存回填首屏行情，提升详情页打开速度
+        if (cur) {
+          this.stockType = this.normalizeType(cur);
+          this.syncQuoteBoardLayout();
+          this.stockName = cur.name || this.stockCode;
+          if (typeof cur.curPrice === "number") {
+            this.curPrice = cur.curPrice.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+          }
+          if (typeof cur.changeValue === "number") {
+            this.changeValue = cur.changeValue.toFixed(2);
+          }
+          if (typeof cur.changeRate === "number") {
+            this.changeRate = cur.changeRate.toFixed(2);
+            this.syncChangeRateDisplay();
+          }
+          this.currentLastFetchedAt = typeof cur.lastFetchedAt === "number" ? cur.lastFetchedAt : 0;
+          this.priceColor = parseFloat(this.changeValue) >= 0 ? "#ff0000" : "#00cc00";
+        }
+        if (cur && typeof cur.alertRate === "number") {
+          this.alertRate = cur.alertRate;
+          // 新增：读取基准值
+          this.alertBaseRate = cur.alertBaseRate || null;
+          this.alertText = cur.alertRate.toFixed(2) + "%";
+          this.tempAlertRate = cur.alertRate;
+        } else {
+          this.alertRate = null;
+          this.alertBaseRate = null; // 重置基准值
+          this.alertText = "提醒点";
+        }
+        if (done) done();
+      }.bind(this));
+    },
+
+    persistCurrentStockMeta: function() {
+      var item = {
+        code: this.stockCode,
+        type: this.stockType,
+        name: this.stockName || this.stockCode,
+        market: this.getMarketTagByCode(this.stockCode, this.stockType),
+        curPrice: parseFloat(this.curPrice) || 0,
+        changeValue: parseFloat(this.changeValue) || 0,
+        changeRate: parseFloat(this.changeRate) || 0,
+        lastFetchedAt: Date.now(),
+        alertRate: this.alertRate === null ? null : parseFloat(this.alertRate),
+        // 新增：保存基准值
+        alertBaseRate: this.alertBaseRate === null ? null : parseFloat(this.alertBaseRate)
+      };
+      var signature = JSON.stringify(item);
+      if (signature === this._lastMetaSignature) {
+        return;
+      }
+      this._lastMetaSignature = signature;
+      this.clearPersistTimer();
+      // 合并短时间内连续更新，减少 IO 造成的页面卡顿
+      this._persistTimer = setTimeout(function() {
+        var data = this._storedDataCache || {};
+        var stocks = Array.isArray(data.stocks) ? data.stocks : [];
+        var idx = -1;
+        for (var i = 0; i < stocks.length; i++) {
+          if (this.getAssetKey(stocks[i]) === this.getAssetKey(item)) {
+            idx = i;
+            break;
+          }
+        }
+        if (idx === -1) {
+          stocks.push(item);
+        } else {
+          stocks[idx] = Object.assign({}, stocks[idx], item);
+        }
+        data.stocks = stocks;
+        this._storedDataCache = data;
+        this.saveStoredData(data);
+        this._persistTimer = null;
+      }.bind(this), 800);
+    },
+
+    getMarketPrefix: function(stockCode, type) {
+      if (type === "us") return "us";
+      if (type === "fund" || type === "crypto" || type === "metal") return "";
+      if (!stockCode) return "sz";
+      if (stockCode === "000001") return "sh";
+      if (/^[A-Za-z][A-Za-z0-9.-]{0,9}$/.test(stockCode || "")) return "us";
+      if (/^\d{5}$/.test(stockCode || "")) return "hk";
+      var first3 = stockCode.slice(0, 3);
+      var first2 = stockCode.slice(0, 2);
+      if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588"].indexOf(first3) > -1) return "sh";
+      if (first3 === "159") return "sz";
+      if (["600", "601", "603", "605", "688"].indexOf(first3) > -1) return "sh";
+      if (["00", "30"].indexOf(first2) > -1 || stockCode.indexOf("301") === 0) return "sz";
+      return "sz";
+    },
+
+    isInTimeRange: function(now, startMin, endMin) {
+      var cur = now.getHours() * 60 + now.getMinutes();
+      if (startMin <= endMin) return cur >= startMin && cur <= endMin;
+      return cur >= startMin || cur <= endMin;
+    },
+
+    shouldFetchRealtime: function() {
+      if (this.stockType === "crypto" || this.stockType === "metal") return true;
+      var now = new Date();
+      if (this.stockType === "us") return this.isInTimeRange(now, 21 * 60 + 30, 5 * 60);
+      return this.isInTimeRange(now, 8 * 60, 16 * 60 + 30);
+    },
+
+    buildSimpleQuoteUrl: function() {
+      if (this.stockType === "fund") {
+        return "https://fundgz.1234567.com.cn/js/" + this.stockCode + ".js?rt=" + Date.now();
+      }
+      if (this.stockType === "crypto") {
+        return "https://www.okx.com/api/v5/market/ticker?instId=" + this.stockCode;
+      }
+      return "";
+    },
+
+    parseFundQuote: function(resData) {
+      var jsonStr = String(resData || "").replace(/^jsonpgz\(/, "").replace(/\);?$/, "");
+      var raw = JSON.parse(jsonStr);
+      if (!raw || !raw.fundcode) return false;
+      this.stockName = raw.name || this.stockCode;
+      this.curPrice = (parseFloat(raw.gsz || raw.dwjz) || 0).toFixed(4);
+      this.changeValue = "0.00";
+      this.changeRate = (parseFloat(raw.gszzl) || 0).toFixed(2);
+      this.syncChangeRateDisplay();
+      this.priceColor = parseFloat(this.changeRate) >= 0 ? "#ff0000" : "#00cc00";
+      this.currentLastFetchedAt = Date.now();
+      this.times = ["09:30", "11:30", "15:00"];
+      this.setSimpleLineData();
+      this.persistCurrentStockMeta();
+      return true;
+    },
+
+    parseCryptoQuote: function(resData) {
+      var raw = JSON.parse(resData || "{}");
+      if (!raw || raw.code !== "0" || !raw.data || !raw.data[0]) return false;
+      var data = raw.data[0];
+      var cur = parseFloat(data.last) || 0;
+      var open = parseFloat(data.open24h) || cur;
+      var diff = cur - open;
+      this.stockName = this.stockCode;
+      this.curPrice = cur.toFixed(4);
+      this.changeValue = diff.toFixed(4);
+      this.changeRate = ((diff / (open || 1)) * 100).toFixed(2);
+      this.syncChangeRateDisplay();
+      this.priceColor = diff >= 0 ? "#ff0000" : "#00cc00";
+      this.currentLastFetchedAt = Date.now();
+      this.times = ["00:00", "12:00", "24:00"];
+      this.setSimpleLineData();
+      this.persistCurrentStockMeta();
+      return true;
+    },
+
+    setSimpleLineData: function() {
+      var len = 121;
+      this.lineData[0].data = new Array(len).fill(null);
+      this.lineData[1].data = new Array(len).fill(null);
+      this.lineData[2].data = new Array(len).fill(null);
+      this.lineData[2].strokeColor = this.priceColor;
+      this.lastZeroData = new Array(len).fill(null);
+      this.lastAvgData = new Array(len).fill(null);
+      this.refreshLineData();
+      this.preCloseText = "--";
+      this.openPriceText = "--";
+      this.highPriceText = "--";
+      this.lowPriceText = "--";
+      this.volumeText = "--";
+      this.amountText = "--";
+      this.turnoverText = "--";
+      this.volumeRatioText = "--";
+      this.circulationText = "--";
+      this.amplitudeText = "--";
+      this.limitUpText = "--";
+      this.limitDownText = "--";
+      this.depthTitle = this.stockType === "fund" ? "基金估值" : "24小时行情";
+      this.showDepthVolume = false;
+      this.quoteRowHeight = "36px";
+      this.depthRows = [];
+    },
+
+    fetchSimpleQuoteData: function() {
+      fetch.fetch({
+        url: this.buildSimpleQuoteUrl(),
+        method: "GET",
+        success: function(res) {
+          try {
+            if (this.stockType === "fund") {
+              this.parseFundQuote(res.data);
+            } else {
+              this.parseCryptoQuote(res.data);
+            }
+            this.checkAlertTrigger();
+          } catch (e) {
+            this.setDefaultData();
+          }
+          this._isFetching = false;
+        }.bind(this),
+        fail: function(err) {
+          console.error("请求失败", err);
+          this.setDefaultData();
+          this._isFetching = false;
+        }.bind(this)
+      });
+    },
+
+    fetchUsMinuteData: function() {
+      fetch.fetch({
+        url: this.buildTencentUsMinuteUrl(),
+        method: "GET",
+        success: function(res) {
+          try {
+            var rawData = this.parseTencentRawResponse(res.data);
+            this.parseUsStockData(rawData);
+            this.checkAlertTrigger();
+          } catch (e) {
+            console.error("美股分时解析失败", e);
+            this.setDefaultData();
+          }
+          this._isFetching = false;
+        }.bind(this),
+        fail: function(err) {
+          console.error("美股分时请求失败", err);
+          this.setDefaultData();
+          this._isFetching = false;
+        }.bind(this)
+      });
+    },
+
+    fetchStockData: function() {
+      var dataKey = this.getCurrentAssetKey();
+      if (this._isFetching) {
+        return;
+      }
+      if (
+        !this.shouldFetchRealtime() &&
+        this.currentLastFetchedAt > 0 &&
+        this._hasMinuteData &&
+        this._minuteDataKey === dataKey
+      ) {
+        return;
+      }
+      this._isFetching = true;
+      if (this.stockType === "fund" || this.stockType === "crypto") {
+        this.fetchSimpleQuoteData();
+        return;
+      }
+      if (this.stockType === "us") {
+        this.fetchUsMinuteData();
+        return;
+      }
+      if (this.stockType === "metal") {
+        this.fetchMetalData();
+        return;
+      }
+      var prefix = this.getMarketPrefix(this.stockCode, this.stockType);
+      var url = this.buildMinuteQuoteUrl();
+
+      fetch.fetch({
+        url: url,
+        method: "GET",
+        success: function(res) {
+          try {
+            var jsonStr = res.data;
+            if (jsonStr.indexOf("min_data=") === 0) {
+              jsonStr = jsonStr.substring("min_data=".length);
+            }
+            jsonStr = jsonStr.replace(/;$/, "");
+            var rawData = JSON.parse(jsonStr);
+            this.parseStockData(rawData, prefix);
+            this.checkAlertTrigger();
+          } catch (e) {
+            console.error("解析失败", e);
+            this.setDefaultData();
+          }
+          this._isFetching = false;
+        }.bind(this),
+        fail: function(err) {
+          console.error("请求失败", err);
+          this.setDefaultData();
+          this._isFetching = false;
+        }.bind(this)
+      });
+    },
+
+    fetchMetalQuoteFallback: function() {
+      var urls = this.getMetalQuoteUrls(this.stockCode);
+      var idx = 0;
+      var tryNext = function() {
+        if (idx >= urls.length) {
+          this.setDefaultData();
+          this._isFetching = false;
+          return;
+        }
+        fetch.fetch({
+          url: urls[idx],
+          method: "GET",
+          success: function(res) {
+            try {
+              var parsed = this.parseMetalQuoteResponse(res.data, this.stockCode);
+              if (parsed) {
+                this.applyMetalQuoteOnly(parsed);
+                this.checkAlertTrigger();
+                this._isFetching = false;
+                return;
+              }
+            } catch (e) {
+              console.error("贵金属行情解析失败", e);
+            }
+            idx++;
+            tryNext();
+          }.bind(this),
+          fail: function(err) {
+            console.error("贵金属行情请求失败", err);
+            idx++;
+            tryNext();
+          }.bind(this)
+        });
+      }.bind(this);
+      tryNext();
+    },
+
+    fetchMetalData: function() {
+      fetch.fetch({
+        url: this.buildMetalTrendUrl(),
+        method: "GET",
+        success: function(res) {
+          try {
+            var rawData = this.parseTencentRawResponse(res.data);
+            var trends = rawData && rawData.data ? rawData.data.trends : null;
+            if (rawData && rawData.rc === 0 && Array.isArray(trends) && trends.length > 0) {
+              this.parseMetalTrendData(rawData);
+              this.checkAlertTrigger();
+              this._isFetching = false;
+              return;
+            }
+            this.fetchMetalQuoteFallback();
+          } catch (e) {
+            console.error("贵金属分时解析失败", e);
+            this.fetchMetalQuoteFallback();
+          }
+        }.bind(this),
+        fail: function(err) {
+          console.error("贵金属分时请求失败", err);
+          this.fetchMetalQuoteFallback();
+        }.bind(this)
+      });
+    },
+
+    parseMetalTrendData: function(rawData) {
+      if (!rawData || rawData.rc !== 0 || !rawData.data) {
+        this.setDefaultData();
+        return;
+      }
+      var d = rawData.data;
+      var trends = Array.isArray(d.trends) ? d.trends : [];
+      var preClose = parseFloat(d.preClose) || parseFloat(d.prePrice) || 0;
+      var priceSeries = [];
+      for (var i = 0; i < trends.length; i++) {
+        var parts = String(trends[i] || "").split(",");
+        var p = parseFloat(parts[1]);
+        if (!isNaN(p) && p > 0) priceSeries.push(p);
+      }
+      var cur = priceSeries.length > 0 ? priceSeries[priceSeries.length - 1] : preClose;
+      var diff = cur - preClose;
+      this.stockName = d.name || this.stockCode;
+      this.curPrice = cur.toFixed(2);
+      this.changeValue = diff.toFixed(2);
+      this.changeRate = ((diff / (preClose || 1)) * 100).toFixed(2);
+      this.syncChangeRateDisplay();
+      this.priceColor = diff >= 0 ? "#ff0000" : "#00cc00";
+      this.currentLastFetchedAt = Date.now();
+      this.times = ["00:00", "12:00", "24:00"];
+      this.persistCurrentStockMeta();
+      this.applyPriceSeriesToChart(priceSeries, preClose);
+    },
+
+    formatMinuteLabelByTs: function(ts) {
+      var d = new Date(ts * 1000);
+      var h = d.getHours().toString().padStart(2, "0");
+      var m = d.getMinutes().toString().padStart(2, "0");
+      return h + ":" + m;
+    },
+
+    buildCompressedSeries: function(source, maxLen) {
+      var values = [];
+      var step = Math.ceil((source.length || 1) / maxLen);
+      if (step < 1) step = 1;
+      for (var i = 0; i < source.length; i += step) {
+        values.push(source[i]);
+      }
+      if (values.length > maxLen) values = values.slice(0, maxLen);
+      while (values.length < maxLen) {
+        values.push(null);
+      }
+      return values;
+    },
+
+    applyPriceSeriesToChart: function(priceSeries, preClose) {
+      var maxLen = 121;
+      var twoMinutePriceData = this.buildCompressedSeries(priceSeries || [], maxLen);
+
+      var avgPriceData = [];
+      var sumPrice = 0;
+      var validCount = 0;
+      for (var kk = 0; kk < twoMinutePriceData.length; kk++) {
+        var curP = twoMinutePriceData[kk];
+        if (curP === null || curP <= 0) {
+          avgPriceData.push(null);
+        } else {
+          sumPrice += curP;
+          validCount++;
+          avgPriceData.push(sumPrice / validCount);
+        }
+      }
+
+      var validPrices = [];
+      for (var l = 0; l < twoMinutePriceData.length; l++) {
+        var p = twoMinutePriceData[l];
+        if (p !== null && p > 0) {
+          validPrices.push(p);
+        }
+      }
+
+      var zeroAxisPrice = parseFloat(preClose) || 0;
+      var realMin = validPrices.length > 0 ? Math.min.apply(Math, validPrices) : 0;
+      var realMax = validPrices.length > 0 ? Math.max.apply(Math, validPrices) : 1;
+
+      if (validPrices.length > 0 && zeroAxisPrice > 0) {
+        if (realMin > zeroAxisPrice) {
+          realMin = zeroAxisPrice;
+        } else if (realMax < zeroAxisPrice) {
+          realMax = zeroAxisPrice;
+        }
+      }
+
+      var range = realMax - realMin;
+      var padding = range * 0.05;
+      var finalMin = range === 0 ? realMin - 0.01 : realMin - padding;
+      var finalMax = range === 0 ? realMax + 0.01 : realMax + padding;
+      var scaleFactor = range === 0 ? 1 : finalMax - finalMin;
+
+      var scaledPrice = [];
+      for (var m = 0; m < twoMinutePriceData.length; m++) {
+        var sp = twoMinutePriceData[m];
+        if (sp === null) {
+          scaledPrice.push(null);
+        } else {
+          var val = ((sp - finalMin) / scaleFactor) * 1000;
+          scaledPrice.push(Math.round(Math.max(0, Math.min(1000, val))));
+        }
+      }
+
+      var scaledAvgPrice = [];
+      for (var mm = 0; mm < avgPriceData.length; mm++) {
+        var ap = avgPriceData[mm];
+        if (ap === null) {
+          scaledAvgPrice.push(null);
+        } else {
+          var avgVal = ((ap - finalMin) / scaleFactor) * 1000;
+          scaledAvgPrice.push(Math.round(Math.max(0, Math.min(1000, avgVal))));
+        }
+      }
+
+      var zeroScaled = zeroAxisPrice === 0 ? 500 : ((zeroAxisPrice - finalMin) / scaleFactor) * 1000;
+      zeroScaled = Math.round(Math.max(0, Math.min(1000, zeroScaled)));
+      var zeroData = [];
+      for (var n = 0; n < twoMinutePriceData.length; n++) {
+        zeroData.push(zeroScaled);
+      }
+
+      this.lastZeroData = zeroData.slice();
+      this.lastAvgData = scaledAvgPrice.slice();
+      this.lineData[0].data = this.showZeroAxis ? zeroData : new Array(zeroData.length).fill(null);
+      this.lineData[0].strokeColor = this.showZeroAxis ? "#cccccc" : "transparent";
+      this.lineData[1].data = this.showAvgLine ? scaledAvgPrice : new Array(scaledAvgPrice.length).fill(null);
+      this.lineData[1].strokeColor = this.showAvgLine ? "#f5c542" : "transparent";
+      this.lineData[1].fillColor = "transparent";
+      this.lineData[2].data = scaledPrice;
+      this.lineData[2].strokeColor = this.priceColor;
+      this.lineData[2].fillColor = this.priceColor === "#ff0000" ? "rgba(255,0,0,0.12)" : "rgba(0,204,0,0.06)";
+      this.applyLineLayerOrder();
+      this.refreshLineData();
+      this._hasMinuteData = true;
+      this._minuteDataKey = this.getCurrentAssetKey();
+    },
+
+    syncChangeRateDisplay: function() {
+      var rate = parseFloat(this.changeRate);
+      if (isNaN(rate)) {
+        this.changeRateDisplay = this.changeRate || "0.00";
+        return;
+      }
+      if (this.isUsStock) {
+        this.changeRateDisplay = (rate >= 0 ? "+" : "") + rate.toFixed(2);
+      } else {
+        this.changeRateDisplay = rate.toFixed(2);
+      }
+    },
+
+    extractUsTicker: function(tradeCode) {
+      var raw = String(tradeCode || "").trim().replace(/^\.+/, "");
+      if (!raw) {
+        return String(this.stockCode || "").trim().replace(/^\.+/, "").toUpperCase();
+      }
+      var dot = raw.indexOf(".");
+      if (dot > 0) return raw.slice(0, dot).toUpperCase();
+      return raw.toUpperCase();
+    },
+
+    formatUsMarketCap: function(v) {
+      var n = parseFloat(v);
+      if (isNaN(n)) return "--";
+      return Math.round(n) + "亿";
+    },
+
+    parseUsStockData: function(rawData) {
+      var code = String(this.stockCode || "").toUpperCase();
+      var key = "us" + code;
+      if (!rawData || !rawData.data || !rawData.data[key]) {
+        this.setDefaultData();
+        return;
+      }
+
+      this.isUsStock = true;
+      this.showQuoteBoard = true;
+      var stockData = rawData.data[key];
+      var qtData = stockData.qt && stockData.qt[key] ? stockData.qt[key] : null;
+      if (!qtData || !qtData.length) {
+        this.setDefaultData();
+        return;
+      }
+
+      var preClose = parseFloat(qtData[4]) || 0;
+      var current = parseFloat(qtData[3]) || 0;
+      // 腾讯美股 qt 实测：31=涨跌额 32=涨跌幅% 33=最高 34=最低 36=成交量 45=总市值(亿美元) 48/49=52周高低
+      var changeVal = parseFloat(qtData[31]);
+      var changePct = parseFloat(qtData[32]);
+      if (isNaN(changeVal)) {
+        changeVal = current - preClose;
+      }
+      if (isNaN(changePct)) {
+        changePct = (changeVal / (preClose || 1)) * 100;
+      }
+
+      this.usTicker = this.extractUsTicker(qtData[2] || code);
+      this.stockName = qtData[1] || code;
+      this.curPrice = current.toFixed(2);
+      this.changeValue = changeVal.toFixed(2);
+      this.changeRate = changePct.toFixed(2);
+      this.syncChangeRateDisplay();
+      this.priceColor = changeVal >= 0 ? "#ff0000" : "#00cc00";
+      this.currentLastFetchedAt = Date.now();
+      this.stockDate = stockData.data && stockData.data.date ? stockData.data.date : "";
+
+      this.updateUsQuoteBoard(qtData);
+      this.persistCurrentStockMeta();
+      this._hasMinuteData = true;
+      this._minuteDataKey = this.getCurrentAssetKey();
+    },
+
+    updateUsQuoteBoard: function(qtData) {
+      this.preCloseText = this.formatPrice(qtData[4]);
+      this.openPriceText = this.formatPrice(qtData[5]);
+      this.highPriceText = this.formatPrice(qtData[33]);
+      this.lowPriceText = this.formatPrice(qtData[34]);
+      this.volumeText = this.formatVolumeWan(qtData[36]);
+      this.marketCapText = this.formatUsMarketCap(qtData[45]);
+      this.week52HighText = this.formatPrice(qtData[48]);
+      this.week52LowText = this.formatPrice(qtData[49]);
+      this.usQuoteRowHeight = "38px";
+    },
+
+    parseStockData: function(rawData, prefix) {
+      this.isUsStock = false;
+      if (!rawData || !rawData.data || !rawData.data[prefix + this.stockCode]) {
+        this.setDefaultData();
+        return;
+      }
+
+      var stockData = rawData.data[prefix + this.stockCode];
+      var qtData = stockData.qt[prefix + this.stockCode];
+      var minuteData = stockData.data.data || [];
+      this.stockDate = stockData.data.date || "";
+
+      this.stockName = qtData[1] || "未知股票";
+      this.curPrice = qtData[3] || "0.00";
+      var preClose = parseFloat(qtData[4]) || 0;
+      var current = parseFloat(this.curPrice) || 0;
+      this.changeValue = (current - preClose).toFixed(2);
+      this.changeRate = ((current - preClose) / (preClose || 1)) * 100;
+      this.changeRate = this.changeRate.toFixed(2);
+      this.syncChangeRateDisplay();
+      this.priceColor = parseFloat(this.changeValue) >= 0 ? "#ff0000" : "#00cc00";
+      this.currentLastFetchedAt = Date.now();
+      this.times = prefix === "hk" ? ["09:30", "12:00", "16:00"] : ["09:30", "11:30", "15:00"];
+      this.persistCurrentStockMeta();
+
+      var targetLength = 242;
+      if (!Array.isArray(minuteData)) minuteData = [];
+      if (minuteData.length < targetLength) {
+        for (var i = minuteData.length; i < targetLength; i++) {
+          minuteData.push(null);
+        }
+      } else if (minuteData.length > targetLength) {
+        minuteData = minuteData.slice(0, targetLength);
+      }
+
+      var priceData = [];
+      for (var j = 0; j < minuteData.length; j++) {
+        var item = minuteData[j];
+        if (item === null) {
+          priceData.push(null);
+        } else {
+          var p = parseFloat(item.split(" ")[1]);
+          priceData.push(isNaN(p) ? null : p);
+        }
+      }
+
+      var twoMinutePriceData = [];
+      for (var k = 0; k < priceData.length; k += 2) {
+        twoMinutePriceData.push(priceData[k]);
+      }
+
+      // 分时均线：按时间累计均价（忽略空值）
+      // 无有效分时数据时返回 null，避免将均线错误延伸到未来时段
+      var avgPriceData = [];
+      var sumPrice = 0;
+      var validCount = 0;
+      for (var kk = 0; kk < twoMinutePriceData.length; kk++) {
+        var curP = twoMinutePriceData[kk];
+        if (curP === null || curP <= 0) {
+          avgPriceData.push(null);
+        } else {
+          sumPrice += curP;
+          validCount++;
+          avgPriceData.push(sumPrice / validCount);
+        }
+      }
+
+      var validPrices = [];
+      for (var l = 0; l < twoMinutePriceData.length; l++) {
+        var p = twoMinutePriceData[l];
+        if (p !== null && p > 0) {
+          validPrices.push(p);
+        }
+      }
+
+      var zeroAxisPrice = preClose;
+      var realMin = validPrices.length > 0 ? Math.min.apply(Math, validPrices) : 0;
+      var realMax = validPrices.length > 0 ? Math.max.apply(Math, validPrices) : 1;
+
+      if (validPrices.length > 0) {
+        if (realMin > zeroAxisPrice) {
+          realMin = zeroAxisPrice;
+        } else if (realMax < zeroAxisPrice) {
+          realMax = zeroAxisPrice;
+        }
+      }
+
+      var range = realMax - realMin;
+      var padding = range * 0.05;
+      var finalMin = range === 0 ? realMin - 0.01 : realMin - padding;
+      var finalMax = range === 0 ? realMax + 0.01 : realMax + padding;
+      var scaleFactor = range === 0 ? 1 : (finalMax - finalMin);
+
+      var scaledPrice = [];
+      for (var m = 0; m < twoMinutePriceData.length; m++) {
+        var p = twoMinutePriceData[m];
+        if (p === null) {
+          scaledPrice.push(null);
+        } else {
+          var val = ((p - finalMin) / scaleFactor) * 1000;
+          scaledPrice.push(Math.round(Math.max(0, Math.min(1000, val))));
+        }
+      }
+
+      var scaledAvgPrice = [];
+      for (var mm = 0; mm < avgPriceData.length; mm++) {
+        var ap = avgPriceData[mm];
+        if (ap === null) {
+          scaledAvgPrice.push(null);
+        } else {
+          var avgVal = ((ap - finalMin) / scaleFactor) * 1000;
+          scaledAvgPrice.push(Math.round(Math.max(0, Math.min(1000, avgVal))));
+        }
+      }
+
+      var zeroScaled = zeroAxisPrice === 0 ? 500 : ((zeroAxisPrice - finalMin) / scaleFactor) * 1000;
+      zeroScaled = Math.round(Math.max(0, Math.min(1000, zeroScaled)));
+      var zeroData = [];
+      for (var n = 0; n < twoMinutePriceData.length; n++) {
+        zeroData.push(zeroScaled);
+      }
+
+      this.lastZeroData = zeroData.slice();
+      this.lastAvgData = scaledAvgPrice.slice();
+      this.lineData[0].data = this.showZeroAxis ? zeroData : new Array(zeroData.length).fill(null);
+      this.lineData[0].strokeColor = this.showZeroAxis ? "#cccccc" : "transparent";
+      this.lineData[1].data = this.showAvgLine ? scaledAvgPrice : new Array(scaledAvgPrice.length).fill(null);
+      this.lineData[1].strokeColor = this.showAvgLine ? "#f5c542" : "transparent";
+      this.lineData[1].fillColor = "transparent";
+      this.lineData[2].data = scaledPrice;
+      this.lineData[2].strokeColor = this.priceColor;
+      this.lineData[2].fillColor = this.priceColor === "#ff0000" ? "rgba(255,0,0,0.12)" : "rgba(0,204,0,0.06)";
+      this.applyLineLayerOrder();
+      this.refreshLineData();
+      this._hasMinuteData = true;
+      this._minuteDataKey = this.getCurrentAssetKey();
+
+      this.updateQuoteBoard(qtData);
+    },
+
+    refreshLineData: function() {
+      this.lineData = this.lineData.map(function(series) {
+        return Object.assign({}, series, {
+          data: Array.isArray(series.data) ? series.data.slice() : []
+        });
+      });
+    },
+
+    updateQuoteBoard: function(qtData) {
+      this.preCloseText = this.formatPrice(qtData[4]);
+      this.openPriceText = this.formatPrice(qtData[5]);
+      this.highPriceText = this.formatPrice(qtData[33]);
+      this.lowPriceText = this.formatPrice(qtData[34]);
+      this.volumeText = this.formatVolumeWan(qtData[36]);
+      this.amountText = this.formatAmountYi(qtData[37]);
+      this.turnoverText = this.formatPercent(qtData[38]);
+      this.volumeRatioText = this.formatRatio(qtData[49]);
+      this.circulationText = this.formatCirculationYi(qtData[44]);
+      this.amplitudeText = this.formatAmplitude(qtData[33], qtData[34], qtData[4]);
+      this.limitUpText = this.formatPrice(qtData[47]);
+      this.limitDownText = this.formatPrice(qtData[48]);
+      this.depthRows = this.buildDepthRows(qtData);
+      var isHK = this.isHongKongCode(this.stockCode);
+      this.depthTitle = isHK ? "盘口一档" : "盘口三档";
+      this.showDepthVolume = !isHK;
+      this.quoteRowHeight = isHK ? "36px" : "30px";
+      this.syncQuoteBoardLayout();
+    },
+
+    formatPrice: function(v) {
+      var n = parseFloat(v);
+      return isNaN(n) ? "--" : n.toFixed(2);
+    },
+
+    formatPlain: function(v) {
+      if (v === "" || v === null || typeof v === "undefined") return "--";
+      return String(v);
+    },
+
+    formatPercent: function(v) {
+      var n = parseFloat(v);
+      return isNaN(n) ? "--" : n.toFixed(2) + "%";
+    },
+
+    formatRatio: function(v) {
+      var n = parseFloat(v);
+      return isNaN(n) ? "--" : n.toFixed(2);
+    },
+
+    formatVolumeWan: function(v) {
+      var n = parseFloat(v);
+      if (isNaN(n)) return "--";
+      return (n / 10000).toFixed(2) + "万";
+    },
+
+    formatAmountYi: function(v) {
+      var n = parseFloat(v);
+      if (isNaN(n)) return "--";
+      // 腾讯字段该位通常为万元，换算成亿元展示
+      return (n / 10000).toFixed(2) + "亿";
+    },
+
+    formatAmplitude: function(high, low, preClose) {
+      var h = parseFloat(high);
+      var l = parseFloat(low);
+      var p = parseFloat(preClose);
+      if (isNaN(h) || isNaN(l) || isNaN(p) || !p) return "--";
+      return (((h - l) / p) * 100).toFixed(2) + "%";
+    },
+
+    formatCirculationYi: function(v) {
+      var n = parseFloat(v);
+      if (isNaN(n)) return "--";
+      return n.toFixed(2) + "亿";
+    },
+
+    formatDepthVolume: function(v) {
+      var n = parseFloat(v);
+      if (isNaN(n)) return "--";
+      if (n >= 10000) {
+        return (n / 10000).toFixed(2) + "万";
+      }
+      return String(Math.round(n));
+    },
+
+    formatDepthVolumeForHK: function(v, price) {
+      var volumeText = this.formatDepthVolume(v);
+      if (volumeText !== "--") return volumeText;
+      if (this.formatPrice(price) !== "--") return "0";
+      return "--";
+    },
+
+    isHongKongCode: function(code) {
+      return /^\d{5}$/.test(code || "");
+    },
+
+    isIndexAsset: function() {
+      if (this.stockType === "index") return true;
+      var code = String(this.stockCode || "");
+      if (/^(000001|399001|399006|399673|000688|000300|000905|000852)$/.test(code)) return true;
+      if (/^\d{6}$/.test(code) && code.indexOf("399") === 0) return true;
+      return false;
+    },
+
+    syncQuoteBoardLayout: function() {
+      var isIndex = this.isIndexAsset();
+      var isHK = this.isHongKongCode(this.stockCode);
+      this.showDepthSection = !isIndex;
+      if (isIndex) {
+        this.keyDataRowHeight = "40px";
+      } else if (isHK) {
+        this.keyDataRowHeight = "36px";
+      } else {
+        this.keyDataRowHeight = "30px";
+      }
+    },
+
+    buildDepthRows: function(qtData) {
+      if (!qtData || !qtData.length) return [];
+      if (this.isHongKongCode(this.stockCode)) {
+        var hkBuyPrice = qtData[9];
+        var hkBuyVol = qtData[10];
+        var hkSellPrice = qtData[19];
+        var hkSellVol = qtData[20];
+        return [{
+          buyLabel: "买1",
+          buyPrice: this.formatPrice(hkBuyPrice),
+          buyVolume: this.formatDepthVolumeForHK(hkBuyVol, hkBuyPrice),
+          buyVolumeText: this.formatDepthVolumeForHK(hkBuyVol, hkBuyPrice),
+          sellLabel: "卖1",
+          sellPrice: this.formatPrice(hkSellPrice),
+          sellVolume: this.formatDepthVolumeForHK(hkSellVol, hkSellPrice),
+          sellVolumeText: this.formatDepthVolumeForHK(hkSellVol, hkSellPrice)
+        }];
+      }
+      var rows = [];
+      for (var i = 0; i < 3; i++) {
+        var buyPriceIdx = 9 + i * 2;
+        var buyVolIdx = 10 + i * 2;
+        var sellPriceIdx = 19 + i * 2;
+        var sellVolIdx = 20 + i * 2;
+        rows.push({
+          buyLabel: "买" + (i + 1),
+          buyPrice: this.formatPrice(qtData[buyPriceIdx]),
+          buyVolume: this.formatDepthVolume(qtData[buyVolIdx]),
+          buyVolumeText: this.formatDepthVolume(qtData[buyVolIdx]),
+          sellLabel: "卖" + (i + 1),
+          sellPrice: this.formatPrice(qtData[sellPriceIdx]),
+          sellVolume: this.formatDepthVolume(qtData[sellVolIdx]),
+          sellVolumeText: this.formatDepthVolume(qtData[sellVolIdx])
+        });
+      }
+      return rows;
+    },
+
+    formatQuoteTime: function(v) {
+      var s = this.formatPlain(v);
+      if (s === "--") return s;
+      if (s.length >= 14) {
+        return s.slice(8, 10) + ":" + s.slice(10, 12) + ":" + s.slice(12, 14);
+      }
+      return s;
+    },
+
+    setDefaultData: function() {
+      this._hasMinuteData = false;
+      this._minuteDataKey = "";
+      this.isUsStock = this.stockType === "us";
+      if (this.isUsStock) {
+        this.showQuoteBoard = true;
+        this.usTicker = this.extractUsTicker(this.stockCode);
+      }
+      if (!this.stockName || this.stockName === "—") {
+        this.stockName = "加载失败";
+      }
+      this.curPrice = "0.00";
+      this.changeValue = "0.00";
+      this.changeRate = "0.00";
+      this.changeRateDisplay = "0.00";
+      this.priceColor = "#999999";
+      var len = 121;
+      this.lineData[0].data = new Array(len).fill(500);
+      this.lineData[0].strokeColor = this.showZeroAxis ? "#cccccc" : "transparent";
+      this.lineData[1].data = new Array(len).fill(null);
+      this.lineData[1].strokeColor = this.showAvgLine ? "#f5c542" : "transparent";
+      this.lineData[2].data = new Array(len).fill(null);
+      this.lineData[2].strokeColor = "#ff0000";
+      this.lastZeroData = new Array(len).fill(500);
+      this.lastAvgData = new Array(len).fill(null);
+      this.applyLineLayerOrder();
+      this.refreshLineData();
+      this.preCloseText = "--";
+      this.openPriceText = "--";
+      this.highPriceText = "--";
+      this.lowPriceText = "--";
+      this.volumeText = "--";
+      this.amountText = "--";
+      this.turnoverText = "--";
+      this.volumeRatioText = "--";
+      this.circulationText = "--";
+      this.amplitudeText = "--";
+      this.limitUpText = "--";
+      this.limitDownText = "--";
+      this.marketCapText = "--";
+      this.week52HighText = "--";
+      this.week52LowText = "--";
+      this.depthTitle = "盘口三档";
+      this.showDepthVolume = true;
+      this.quoteRowHeight = "30px";
+      this.depthRows = [];
+      this.syncQuoteBoardLayout();
+    },
+
+    handleSwipe: function(event) {
+      if (!event || !event.direction) return;
+      if (event.direction === "left") {
+        if (!this.isUsStock) {
+          this.showQuoteBoard = true;
+        }
+        return;
+      }
+      if (event.direction === "right") {
+        if (this.showQuoteBoard && !this.isUsStock) {
+          this.showQuoteBoard = false;
+          return;
+        }
+        router.back();
+        return;
+      }
+      // 与缩略页列表顺序一致：上滑下一只，下滑上一只（循环）
+      if (event.direction === "up") {
+        this.goNextInSortedOrder();
+        return;
+      }
+      if (event.direction === "down") {
+        this.goPrevInSortedOrder();
+        return;
+      }
+    },
+
+    handleScreenTap: function() {
+      if (this.isUsStock) return;
+      var now = Date.now();
+      var delta = now - (this.lastTapTs || 0);
+      this.lastTapTs = now;
+      if (delta > 0 && delta < 320) {
+        this.toggleZeroAxis();
+      }
+    },
+
+    applyLineLayerOrder: function() {
+      // 未显示的辅助线压到最底层；都显示时保持原顺序：0轴 < 均线 < 分时线
+      this.lineData[0].zIndex = this.showZeroAxis ? 1 : 0;
+      this.lineData[1].zIndex = this.showAvgLine ? 2 : 0;
+      this.lineData[2].zIndex = 3;
+    },
+
+    toggleZeroAxis: function() {
+      // 切换0轴线显示状态
+      this.showZeroAxis = !this.showZeroAxis;
+      this.lineData[0].data = this.showZeroAxis
+        ? (this.lastZeroData && this.lastZeroData.length ? this.lastZeroData.slice() : this.lineData[0].data)
+        : new Array((this.lineData[0].data || []).length || 121).fill(null);
+      this.lineData[0].strokeColor = this.showZeroAxis ? "#cccccc" : "transparent";
+      this.applyLineLayerOrder();
+      this.refreshLineData();
+      
+      // 显示提示弹窗
+      prompt.showToast({
+        message: this.showZeroAxis ? "0轴线已显示" : "0轴线已隐藏",
+        duration: 1500
+      });
+      console.log(`【0轴线】${this.showZeroAxis ? "显示" : "隐藏"}0轴线`);
+    },
+
+    toggleAvgLine: function() {
+      if (this.isUsStock) return;
+      this.showAvgLine = !this.showAvgLine;
+      this.lineData[1].data = this.showAvgLine
+        ? (this.lastAvgData && this.lastAvgData.length ? this.lastAvgData.slice() : this.lineData[1].data)
+        : new Array((this.lineData[1].data || []).length || 121).fill(null);
+      this.lineData[1].strokeColor = this.showAvgLine ? "#f5c542" : "transparent";
+      this.applyLineLayerOrder();
+      this.refreshLineData();
+      prompt.showToast({
+        message: this.showAvgLine ? "均线已显示" : "均线已隐藏",
+        duration: 1500
+      });
+      console.log(`【均线】${this.showAvgLine ? "显示" : "隐藏"}均线`);
+    },
+
+    // ========== 提醒功能：步长 0.1% ==========
+    toggleAlertPanel: function() {
+      this.showAlertPanel = !this.showAlertPanel;
+      if (this.showAlertPanel) {
+        this.tempAlertRate = parseFloat(this.changeRate) || 0.00;
+        console.log(`【提醒面板】打开调节面板，初始值为当前涨跌幅：${this.tempAlertRate}%`);
+      } else {
+        console.log(`【提醒面板】关闭调节面板`);
+      }
+    },
+
+    // 减少 0.1%
+    minusRate: function() {
+      this.tempAlertRate = parseFloat((this.tempAlertRate - 0.1).toFixed(2));
+      console.log(`【提醒调节】减少0.1%，当前值：${this.tempAlertRate}%`);
+    },
+
+    // 增加 0.1%
+    plusRate: function() {
+      this.tempAlertRate = parseFloat((this.tempAlertRate + 0.1).toFixed(2));
+      console.log(`【提醒调节】增加0.1%，当前值：${this.tempAlertRate}%`);
+    },
+
+    confirmAlertRate: function() {
+      this.alertRate = this.tempAlertRate;
+      // 新增：保存设置提醒点时的当前涨跌幅作为基准
+      this.alertBaseRate = parseFloat(this.changeRate) || 0.00;
+      this.alertText = this.alertRate.toFixed(2) + "%";
+      this.showAlertPanel = false;
+      this.persistCurrentStockMeta();
+      console.log(`【提醒设置】确认提醒点：${this.alertRate}%，设置时基准涨跌幅：${this.alertBaseRate}%`);
+      try {
+        vibrator.vibrate({ mode: 'short' });
+        prompt.showToast({
+          message: `已设置提醒点：${this.alertRate.toFixed(2)}%`,
+          duration: 1500
+        });
+      } catch (e) {
+        console.error("【振动反馈】短振动触发失败", e);
+      }
+    },
+
+    checkAlertTrigger: function() {
+      if (this.alertRate === null || this.alertBaseRate === null) {
+        return;
+      }
+
+      var nowRate = parseFloat(this.changeRate); // 实时涨跌幅
+      var alertRate = this.alertRate; // 提醒点
+      var baseRate = this.alertBaseRate; // 设置提醒点时的基准涨跌幅
+
+      var trigger = false;
+      var alertType = "";
+
+      // 核心逻辑：基于基准值判断方向，只有设置后股价变动突破提醒点才触发
+      if (alertRate > baseRate) {
+        // 场景1：设置的提醒点 > 基准值（用户想等涨上去）
+        // 只有实时涨跌幅 ≥ 提醒点 才触发（突破）
+        if (nowRate >= alertRate - 0.01) { // 0.01% 误差容忍
+          trigger = true;
+          alertType = "突破";
+        }
+      } else if (alertRate < baseRate) {
+        // 场景2：设置的提醒点 < 基准值（用户想等跌下去）
+        // 只有实时涨跌幅 ≤ 提醒点 才触发（跌破）
+        if (nowRate <= alertRate + 0.01) { // 0.01% 误差容忍
+          trigger = true;
+          alertType = "跌破";
+        }
+      } else {
+        // 场景3：提醒点 = 基准值（设置时相等，需股价先偏离再回来才触发）
+        return; // 直接返回，避免设置瞬间触发
+      }
+
+      if (trigger) {
+        console.log(`【提醒检测】${alertType}提醒点，触发提醒`);
+        try {
+          vibrator.vibrate({ mode: 'long' });
+          prompt.showToast({
+            message: `${this.stockName}(${this.stockCode}) 已${alertType} ${alertRate.toFixed(2)}%`,
+            duration: 2000
+          });
+        } catch (e) {
+          console.error("【提醒触发】振动/弹窗失败", e);
+        }
+
+        // 触发后清空提醒点和基准值
+        this.alertRate = null;
+        this.alertBaseRate = null;
+        this.alertText = "提醒点";
+        this.persistCurrentStockMeta();
+      }
+    },
+
+    // 显示自定义删除确认弹窗
+    showDeleteConfirm: function() {
+      console.log(`【删除股票】点击删除按钮，显示自定义确认弹窗`);
+      this.showDeleteMask = true;
+      // 短振动反馈点击操作
+      try {
+        vibrator.vibrate({
+          mode: 'short'
+        });
+      } catch (e) {
+        console.error("【删除股票】弹窗振动反馈失败", e);
+      }
+    },
+
+    // 隐藏自定义删除确认弹窗
+    hideDeleteConfirm: function() {
+      console.log(`【删除股票】关闭删除确认弹窗`);
+      this.showDeleteMask = false;
+      prompt.showToast({
+        message: "已取消删除",
+        duration: 1000
+      });
+    },
+
+    // 执行删除股票逻辑
+    deleteStock: function() {
+      console.log(`【删除股票】执行删除：${this.stockCode}（索引：${this.currentStockIndex}）`);
+      // 先隐藏弹窗
+      this.showDeleteMask = false;
+      // 执行删除并持久化
+      this.getStoredData(function(data) {
+        var stocks = this.dedupeStocks(Array.isArray(data.stocks) ? data.stocks : []);
+        var nextStocks = [];
+        var curKey = this.getAssetKey({ code: this.stockCode, type: this.stockType });
+        for (var i = 0; i < stocks.length; i++) {
+          if (this.getAssetKey(stocks[i]) !== curKey) {
+            nextStocks.push(stocks[i]);
+          }
+        }
+        data.stocks = nextStocks;
+        this.saveStoredData(data);
+        this.watchList = nextStocks.map(function(item) {
+          return {
+            code: item.code,
+            type: item.type || "stock"
+          };
+        });
+      }.bind(this));
+      // 短振动反馈删除操作
+      try {
+        vibrator.vibrate({
+          mode: 'short'
+        });
+      } catch (e) {
+        console.error("【删除股票】振动反馈失败", e);
+      }
+      prompt.showToast({
+        message: "已删除该股票",
+        duration: 1200
+      });
+      setTimeout(function() {
+        router.back();
+      }, 300);
+    },
+
+    // 新增：阻止事件冒泡的方法
+    stopPropagation: function(e) {
+      if (e && e.stopPropagation) {
+        e.stopPropagation();
+      } else if (e && e.nativeEvent) {
+        e.nativeEvent.stopPropagation();
+      }
+    },
+
+    goNextInSortedOrder: function() {
+      if (this.watchList.length <= 1) {
+        console.log(`【切换股票】自选股列表仅1只，无法切换`);
+        return;
+      }
+      this.currentStockIndex = (this.currentStockIndex + 1) % this.watchList.length;
+      this.stockCode = this.watchList[this.currentStockIndex].code;
+      this.stockType = this.watchList[this.currentStockIndex].type || "stock";
+      this.prepareStockSwitch();
+      this.loadWatchContext(function() {
+        this.fetchStockData();
+      }.bind(this));
+      console.log(`【切换股票】下一只（与缩略页排序一致）：${this.stockCode}（索引：${this.currentStockIndex}）`);
+    },
+
+    goPrevInSortedOrder: function() {
+      if (this.watchList.length <= 1) {
+        console.log(`【切换股票】自选股列表仅1只，无法切换`);
+        return;
+      }
+      this.currentStockIndex = (this.currentStockIndex - 1 + this.watchList.length) % this.watchList.length;
+      this.stockCode = this.watchList[this.currentStockIndex].code;
+      this.stockType = this.watchList[this.currentStockIndex].type || "stock";
+      this.prepareStockSwitch();
+      this.loadWatchContext(function() {
+        this.fetchStockData();
+      }.bind(this));
+      console.log(`【切换股票】上一只（与缩略页排序一致）：${this.stockCode}（索引：${this.currentStockIndex}）`);
+    },
+
+    getDate: function() {
+      this.clearTimeoutTimer();
+      this.updateCurTime();
+      var date = new Date();
+      this.timeoutTimer = setTimeout(function() {
+        this.getDate();
+      }.bind(this), (60 - date.getSeconds()) * 1000);
+    },
+
+    updateCurTime: function() {
+      var time = new Date();
+      var h = time.getHours().toString().padStart(2, "0");
+      var m = time.getMinutes().toString().padStart(2, "0");
+      var s = time.getSeconds().toString().padStart(2, "0");
+      this.curTime = h + ":" + m + ":" + s;
+    }
+  };
+</script>
+
+<style>
+  .combined-page {
+    flex-direction: column;
+    align-items: center;
+    background-color: #000000;
+    padding-bottom: 20px;
+    height: 100vh;
+    /* 新增：让容器成为定位上下文 */
+    position: relative;
+  }
+
+  .stock-header {
+    width: 90%;
+    flex-direction: column;
+    margin-top: 15px;
+    margin-bottom: 0;
+  }
+  .stock-name {
+    font-size: 28px;
+    color: #ffffff;
+    margin-bottom: 4px;
+  }
+  .stock-price-wrap {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  .us-stock-price-wrap {
+    justify-content: flex-start;
+  }
+  .stock-price {
+    font-size: 36px;
+    font-weight: bold;
+    margin-right: 10px;
+    flex-shrink: 0;
+  }
+  .us-stock-price {
+    font-size: 30px;
+    margin-right: 8px;
+  }
+  .stock-change {
+    font-size: 24px;
+    margin-right: 5px;
+    flex-shrink: 0;
+  }
+  .us-stock-change {
+    font-size: 20px;
+    margin-right: 6px;
+  }
+  .stock-change-rate {
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .us-stock-change-rate {
+    font-size: 18px;
+  }
+
+  .line-section {
+    width: 100%;
+    align-items: center;
+    margin-top: 0;
+    flex: 1;
+  }
+  .line-stack-wrap {
+    position: relative;
+    width: 100%;
+  }
+  .line-top-wrap {
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+  }
+  .line-chart-wrap {
+    width: 88%;
+    padding: 0;
+    margin: 0;
+  }
+  .line-chart {
+    width: 100%;
+    height: 200px;
+    padding: 0;
+    margin: 0;
+    image-rendering: pixelated;
+    background-color: transparent;
+    border: none;
+  }
+  .line-time-wrap {
+    width: 85%;
+    justify-content: space-between;
+    margin-top: 10px;
+  }
+  .line-times {
+    font-size: 18px;
+    color: #ffffff;
+  }
+  .quote-board {
+    width: 96%;
+    flex: 1;
+    margin-top: -8px;
+    flex-direction: column;
+  }
+  .quote-section {
+    width: 100%;
+    background-color: #0d1218;
+    border-radius: 10px;
+    border-width: 2px;
+    border-color: #2b3a4a;
+    padding: 4px 8px;
+    flex-direction: column;
+  }
+  .box-title {
+    color: #c8d2df;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .depth-section {
+    margin-top: 10px;
+    background-color: #121016;
+    border-width: 2px;
+    border-color: #5b4580;
+  }
+  .us-quote-section {
+    border-color: #3a4f7a;
+    padding: 6px 8px;
+  }
+  .us-quote-row {
+    margin-bottom: 4px;
+  }
+  .us-quote-label {
+    font-size: 20px;
+  }
+  .us-quote-value {
+    font-size: 20px;
+  }
+  .quote-row-single {
+    justify-content: flex-start;
+  }
+  .quote-label-wide {
+    width: 38%;
+  }
+  .quote-value-single {
+    width: 58%;
+    text-align: right;
+  }
+  .depth-simple-row {
+    min-height: 30px;
+    padding-top: 0;
+    padding-bottom: 0;
+    justify-content: flex-start;
+  }
+  .depth-col {
+    text-align: right;
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .depth-col-label {
+    width: 10%;
+    color: #c2bad5;
+    font-weight: bold;
+  }
+  .depth-col-price {
+    width: 21%;
+    font-weight: bold;
+  }
+  .depth-col-qty {
+    width: 14%;
+    color: #8f84a6;
+    font-size: 13px;
+    font-weight: bold;
+  }
+  .quote-section-title {
+    color: #7f8ea3;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .quote-row {
+    width: 100%;
+    height: 30px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom-width: 1px;
+    border-bottom-color: #202a35;
+  }
+  .quote-label {
+    width: 20%;
+    color: #a9b2bf;
+    font-size: 17px;
+    font-weight: bold;
+  }
+  .quote-mid-label {
+    margin-left: 16px;
+  }
+  .quote-value {
+    width: 30%;
+    color: #29d5ff;
+    font-size: 17px;
+    text-align: right;
+    font-weight: bold;
+  }
+  .amp-value {
+    color: #29d5ff;
+  }
+  .depth-row {
+    width: 100%;
+    min-height: 44px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom-width: 1px;
+    border-bottom-color: #2a2039;
+    padding: 4px 0;
+  }
+  .depth-side {
+    width: 48%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .depth-side-right {
+    margin-left: 4%;
+  }
+  .depth-label {
+    color: #c2bad5;
+    font-size: 16px;
+    width: 26%;
+  }
+  .depth-values {
+    width: 72%;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .depth-price {
+    font-size: 17px;
+    line-height: 1.2;
+  }
+  .depth-volume {
+    color: #8f84a6;
+    font-size: 13px;
+    line-height: 1.2;
+    margin-top: 2px;
+  }
+  .up-value {
+    color: #ff4d4f;
+    font-weight: bold;
+  }
+  .down-value {
+    color: #31d47a;
+    font-weight: bold;
+  }
+
+  .bottom-buttons {
+    width: 90%;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    margin-bottom: 10px;
+  }
+  .btn-k {
+    width: 60px;
+    height: 60px;
+    border-radius: 30px;
+    background-color: #ffcc33;
+    border-width: 1px;
+    border-color: #d8a600;
+    justify-content: center;
+    align-items: center;
+  }
+  .btn-alert {
+    width: 120px;
+    height: 60px;
+    background-color: #2f8cff;
+    border-width: 1px;
+    border-color: #1f6fd1;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+  }
+  .btn-delete {
+    width: 60px;
+    height: 60px;
+    border-radius: 30px;
+    background-color: #e5484d;
+    border-width: 1px;
+    border-color: #bf3238;
+    justify-content: center;
+    align-items: center;
+  }
+  .btn-text {
+    font-size: 22px;
+    color: #ffffff;
+    font-weight: bold;
+  }
+
+  /* 涨跌幅调节面板 */
+  .alert-adjust-wrap {
+    width: 80%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    background-color: #222222;
+    border-radius: 10px;
+    padding: 8px 12px;
+  }
+  .alert-btn {
+    width: 50px;
+    height: 40px;
+    background-color: #444444;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+  }
+  .alert-btn-font {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: bold;
+  }
+  .alert-rate-show {
+    color: #ffffff;
+    font-size: 22px;
+    min-width: 80px;
+    text-align: center;
+  }
+  .alert-confirm {
+    height: 40px;
+    background-color: #2f8cff;
+    border-width: 1px;
+    border-color: #1f6fd1;
+    padding: 0 14px;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+  }
+  .alert-confirm-font {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: bold;
+  }
+
+  /* 自定义删除确认弹窗样式（修复版） */
+  .delete-confirm-mask {
+    position: absolute; /* 修改：从fixed改为absolute，基于父容器定位 */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    /* 新增：居中布局 */
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+    /* 新增：确保覆盖整个屏幕 */
+    display: flex;
+  }
+  .delete-confirm-box {
+    width: 80%;
+    background-color: #222222;
+    border-radius: 12px;
+    padding: 20px 15px;
+    flex-direction: column;
+    align-items: center;
+    /* 新增：确保弹窗内容居中 */
+    display: flex;
+  }
+  .delete-confirm-title {
+    font-size: 24px;
+    color: #ffffff;
+    font-weight: bold;
+    margin-bottom: 15px;
+  }
+  .delete-confirm-content {
+    font-size: 20px;
+    color: #ffffff;
+    text-align: center;
+    margin-bottom: 20px;
+    line-height: 1.4;
+  }
+  .delete-confirm-btns {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    /* 新增：确保按钮行显示正常 */
+    display: flex;
+  }
+  .delete-cancel-btn {
+    width: 45%;
+    height: 50px;
+    background-color: #4a4a4a;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+  }
+  .delete-ok-btn {
+    width: 45%;
+    height: 50px;
+    background-color: #ff3b30;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+  }
+  .btn-font {
+    font-size: 22px;
+    color: #ffffff;
+    font-weight: bold;
+  }
+</style>

@@ -1,0 +1,1217 @@
+<template>
+  <div class="page">
+    <div class="header">
+      <div class="title-row">
+        <div class="header-slot header-slot-left">
+          <text class="clock-text">{{ currentTime }}</text>
+        </div>
+        <div class="header-slot header-slot-center">
+          <div class="setting-btn" @click="openSettings">
+            <image class="setting-icon" src="/common/setting.png"></image>
+          </div>
+        </div>
+        <div class="header-slot header-slot-right">
+          <div class="sort-label" @click="toggleSortDirection">
+            <text class="sort-label-text">{{ sortLabelText }}</text>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="list-wrap">
+      <div
+        class="stock-card"
+        for="{{ displayStocks }}"
+        @touchstart="onStockTouchStart($item, $event)"
+        @touchmove="onStockTouchMove($item, $event)"
+        @touchend="onStockTouchEnd($item, $event)"
+        @click="handleStockClick($item)">
+
+        <div class="stock-card-content" if="{{ !isEditing || editingKey !== $item.assetKey }}">
+          <div class="left-col">
+            <text class="stock-name">{{ $item.name }}</text>
+            <div class="code-row">
+              <text class="market-tag">{{ $item.market }}</text>
+              <text class="stock-code">{{ $item.code }}</text>
+            </div>
+          </div>
+
+          <div class="right-col">
+            <div class="rate-chip" style="background-color: {{ $item.rateBgColor }}">
+              <text class="rate-text">{{ $item.changeRateText }}</text>
+            </div>
+            <text class="price-text">{{ $item.priceText }}</text>
+          </div>
+        </div>
+
+        <div class="action-buttons" if="{{ isEditing && editingKey === $item.assetKey }}">
+          <div class="action-btn action-btn-up" @click="onMoveStockUp($item, $event)">
+            <text class="action-icon">↑</text>
+            <text class="action-label">上移</text>
+          </div>
+          <div class="action-btn action-btn-down" @click="onMoveStockDown($item, $event)">
+            <text class="action-icon">↓</text>
+            <text class="action-label">下移</text>
+          </div>
+          <div class="action-btn action-btn-delete" @click="onDeleteStock($item, $event)">
+            <text class="action-icon">删</text>
+            <text class="action-label">删除</text>
+          </div>
+        </div>
+      </div>
+
+      <div class="add-card" @click="addStockCard">
+        <text class="add-text">+</text>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import router from "@system.router";
+import storage from "@system.storage";
+import brightness from "@system.brightness";
+import prompt from "@system.prompt";
+import vibrator from "@system.vibrator";
+const fetch = require("@system.fetch");
+
+const STORAGE_KEY = "stock_watch_data";
+
+export default {
+  private: {
+    sortMode: "change",
+    sortDirection: "desc",
+    sortLabelText: "涨跌↓",
+    stocks: [],
+    displayStocks: [],
+    currentTime: "--:--",
+    isEditing: false,
+    editingKey: "",
+    touchingKey: "",
+    touchStartX: 0,
+    touchStartY: 0,
+    touchStartTs: 0,
+    touchMoved: false,
+    longPressTimer: null,
+    longPressTriggered: false,
+    suppressClickUntil: 0,
+    refreshTimer: null,
+    clockTimer: null,
+    pageActive: false,
+    refreshBusy: false,
+    refreshQueue: [],
+    refreshNeedSave: false,
+    refreshPendingAgain: false,
+    refreshToken: 0
+  },
+
+  onInit: function() {
+    this.applyKeepScreenOnSetting();
+    this.loadFromStorage();
+    this.startClockTimer();
+  },
+
+  onShow: function() {
+    this.pageActive = true;
+    this.applyKeepScreenOnSetting();
+    this.loadFromStorage();
+    this.updateCurrentTime();
+    this.startRefreshTimer();
+  },
+
+  onHide: function() {
+    this.stopAllRefreshImmediately();
+  },
+
+  stopAllRefreshImmediately: function() {
+    this.pageActive = false;
+    this.refreshToken = (this.refreshToken || 0) + 1;
+    this.refreshQueue = [];
+    this.refreshBusy = false;
+    this.refreshPendingAgain = false;
+    this.refreshNeedSave = false;
+    this.stopRefreshTimer();
+  },
+
+  onDestroy: function() {
+    this.stopRefreshTimer();
+    this.stopClockTimer();
+    this.clearLongPressTimer();
+    this.setKeepScreenOn(false);
+  },
+
+  setKeepScreenOn: function(on) {
+    try {
+      brightness.setKeepScreenOn({
+        keepScreenOn: !!on
+      });
+    } catch (e) {}
+  },
+
+  applyKeepScreenOnSetting: function() {
+    this.getStoredData(function(data) {
+      var keep = typeof data.keepScreenOn === "boolean" ? data.keepScreenOn : true;
+      this.setKeepScreenOn(keep);
+    }.bind(this));
+  },
+
+  getDefaultStocks: function() {
+    return [
+      { code: "000001", type: "index", name: "上证指数", market: "沪", alertRate: null, alertBaseRate: null }
+    ];
+  },
+
+  getStoredData: function(done) {
+    storage.get({
+      key: STORAGE_KEY,
+      default: "",
+      success: function(value) {
+        var parsed = {};
+        try {
+          parsed = value ? JSON.parse(value) : {};
+        } catch (e) {
+          parsed = {};
+        }
+        done(parsed);
+      },
+      fail: function() {
+        done({});
+      }
+    });
+  },
+
+  saveStoredData: function(data) {
+    storage.set({
+      key: STORAGE_KEY,
+      value: JSON.stringify(data || {})
+    });
+  },
+
+  normalizeType: function(item) {
+    if (item && item.type) return item.type;
+    var code = String(item && item.code ? item.code : "").toUpperCase();
+    if (/^(XAU|XAG|XAUUSD|XAGUSD)$/.test(code)) return "metal";
+    if (/^[A-Za-z][A-Za-z0-9.-]{0,7}$/.test(code)) return "us";
+    if (/^[A-Z0-9]{2,12}-USDT$/.test(code)) return "crypto";
+    if (/^\d{6}$/.test(code) && (code.indexOf("399") === 0 || code === "000001")) return "index";
+    if (code === "000001") return "index";
+    return "stock";
+  },
+
+  getAssetKey: function(item) {
+    return this.normalizeType(item) + ":" + String(item && item.code ? item.code : "").toUpperCase();
+  },
+
+  dedupeStocks: function(stocks) {
+    var seen = {};
+    var next = [];
+    for (var i = 0; i < (stocks || []).length; i++) {
+      var item = stocks[i] || {};
+      if (!item.code) continue;
+      item.type = this.normalizeType(item);
+      var key = this.getAssetKey(item);
+      if (seen[key]) continue;
+      seen[key] = true;
+      next.push(item);
+    }
+    return next;
+  },
+
+  getMarketPrefix: function(stockCode, type) {
+    var code = String(stockCode || "").toUpperCase();
+    if (type === "us") return "us";
+    if (type === "index") {
+      if (code === "000001") return "sh";
+      if (code.indexOf("399") === 0) return "sz";
+      if (code.indexOf("000") === 0) return "sh";
+      return "sz";
+    }
+    if (type === "fund" || type === "crypto" || type === "metal") return "";
+    if (/^\d{5}$/.test(code)) return "hk";
+    var first3 = code.slice(0, 3);
+    var first2 = code.slice(0, 2);
+    if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588"].indexOf(first3) > -1) return "sh";
+    if (first3 === "159") return "sz";
+    if (["600", "601", "603", "605", "688"].indexOf(first3) > -1) return "sh";
+    if (["00", "30"].indexOf(first2) > -1 || code.indexOf("301") === 0 || code.indexOf("399") === 0) return "sz";
+    return "sz";
+  },
+
+  getMarketTagByCode: function(stockCode, type) {
+    var code = String(stockCode || "").toUpperCase();
+    if (type === "us") return "美";
+    if (type === "crypto") return "币";
+    if (type === "fund") return "基";
+    if (type === "metal") return "贵";
+    if (type === "index") return this.getMarketPrefix(code, type) === "sh" ? "沪" : "深";
+    if (/^\d{5}$/.test(code)) return "港";
+    var first3 = code.slice(0, 3);
+    if (["510", "511", "512", "513", "515", "516", "517", "518", "560", "561", "562", "563", "588", "159"].indexOf(first3) > -1) return "ETF";
+    return this.getMarketPrefix(code, type) === "sh" ? "沪" : "深";
+  },
+
+  syncSortUi: function() {
+    var dir = this.sortDirection === "desc" ? "↓" : "↑";
+    if (this.sortMode === "sequence") {
+      this.sortLabelText = "自选" + dir;
+    } else {
+      this.sortLabelText = "涨跌" + dir;
+    }
+  },
+
+  loadFromStorage: function() {
+    this.getStoredData(function(data) {
+      this.sortMode = data.sortMode === "sequence" ? "sequence" : "change";
+      if (typeof data.sortDirection === "string") {
+        this.sortDirection = data.sortDirection === "asc" ? "asc" : "desc";
+      } else if (typeof data.sortDesc === "boolean") {
+        this.sortDirection = data.sortDesc ? "desc" : "asc";
+      } else {
+        this.sortDirection = "desc";
+      }
+      this.syncSortUi();
+      var base = Array.isArray(data.stocks) && data.stocks.length ? data.stocks : this.getDefaultStocks();
+      base = this.dedupeStocks(base);
+      this.stocks = base.map(function(item, index) {
+        var type = this.normalizeType(item);
+        return {
+          code: item.code,
+          type: type,
+          name: item.name || item.code,
+          market: item.market || this.getMarketTagByCode(item.code, type),
+          alertRate: item.alertRate === null || typeof item.alertRate === "number" ? item.alertRate : null,
+          alertBaseRate: item.alertBaseRate === null || typeof item.alertBaseRate === "number" ? item.alertBaseRate : null,
+          curPrice: typeof item.curPrice === "number" ? item.curPrice : 0,
+          changeValue: typeof item.changeValue === "number" ? item.changeValue : 0,
+          changeRate: typeof item.changeRate === "number" ? item.changeRate : 0,
+          lastFetchedAt: typeof item.lastFetchedAt === "number" ? item.lastFetchedAt : 0,
+          addedAt: typeof item.addedAt === "number" ? item.addedAt : index
+        };
+      }.bind(this));
+      if (!Array.isArray(data.stocks) || data.stocks.length !== this.stocks.length) {
+        data.stocks = this.stocks;
+        data.sortDirection = this.sortDirection;
+        this.saveStoredData(data);
+      }
+      this.sortAndRender();
+      this.refreshAllStocks(true);
+    }.bind(this));
+  },
+
+  persistCurrentState: function() {
+    this.getStoredData(function(data) {
+      data = data || {};
+      data.sortMode = this.sortMode;
+      data.sortDirection = this.sortDirection;
+      data.stocks = this.stocks;
+      this.saveStoredData(data);
+    }.bind(this));
+  },
+
+  sortAndRender: function() {
+    var sorted = this.stocks.slice().sort(function(a, b) {
+      if (this.sortMode === "sequence") {
+        return this.sortDirection === "asc"
+          ? (a.addedAt || 0) - (b.addedAt || 0)
+          : (b.addedAt || 0) - (a.addedAt || 0);
+      }
+      var delta = this.sortDirection === "asc"
+        ? (a.changeRate || 0) - (b.changeRate || 0)
+        : (b.changeRate || 0) - (a.changeRate || 0);
+      if (delta !== 0) return delta;
+      return this.sortDirection === "asc"
+        ? (a.addedAt || 0) - (b.addedAt || 0)
+        : (b.addedAt || 0) - (a.addedAt || 0);
+    }.bind(this));
+
+    this.displayStocks = sorted.map(function(item) {
+      var rate = typeof item.changeRate === "number" ? item.changeRate : 0;
+      return {
+        code: item.code,
+        type: item.type,
+        name: item.name || item.code,
+        market: item.market || this.getMarketTagByCode(item.code, item.type),
+        curPrice: item.curPrice || 0,
+        changeValue: item.changeValue || 0,
+        changeRate: rate,
+        changeRateText: (rate >= 0 ? "" : "-") + Math.abs(rate).toFixed(2) + "%",
+        priceText: (typeof item.curPrice === "number" ? item.curPrice : 0).toFixed(item.type === "fund" ? 4 : 2),
+        rateBgColor: rate >= 0 ? "#ff0000" : "#23b14d",
+        assetKey: this.getAssetKey(item)
+      };
+    }.bind(this));
+  },
+
+  toggleSortDirection: function() {
+    this.sortDirection = this.sortDirection === "desc" ? "asc" : "desc";
+    this.syncSortUi();
+    this.sortAndRender();
+    this.persistCurrentState();
+    prompt.showToast({
+      message: this.sortDirection === "desc" ? "已切换为降序" : "已切换为升序",
+      duration: 800
+    });
+  },
+
+  routeDetail: function(stock) {
+    this.stopAllRefreshImmediately();
+    router.push({
+      uri: "/pages/detail",
+      params: {
+        stockCode: stock.code,
+        stockType: stock.type || this.normalizeType(stock)
+      }
+    });
+  },
+
+  handleStockClick: function(stock) {
+    if (!stock) return;
+    if (this.longPressTriggered) return;
+    if (this.touchMoved) return;
+    if (this.suppressClickUntil && Date.now() < this.suppressClickUntil) return;
+    if (this.isEditing) {
+      this.exitEditMode();
+      return;
+    }
+    this.routeDetail(stock);
+  },
+
+  extractTouchPoint: function(event) {
+    var e = event || {};
+    var p =
+      (e.touches && e.touches[0]) ||
+      (e.changedTouches && e.changedTouches[0]) ||
+      e;
+    var x =
+      typeof p.clientX === "number"
+        ? p.clientX
+        : typeof p.pageX === "number"
+          ? p.pageX
+          : typeof p.screenX === "number"
+            ? p.screenX
+            : typeof p.x === "number"
+              ? p.x
+              : 0;
+    var y =
+      typeof p.clientY === "number"
+        ? p.clientY
+        : typeof p.pageY === "number"
+          ? p.pageY
+          : typeof p.screenY === "number"
+            ? p.screenY
+            : typeof p.y === "number"
+              ? p.y
+              : 0;
+    return { x: x, y: y };
+  },
+
+  stopEvent: function(event) {
+    this.suppressClickUntil = Date.now() + 800;
+    this.longPressTriggered = true;
+    if (event && event.stopPropagation) {
+      event.stopPropagation();
+    } else if (event && event.nativeEvent && event.nativeEvent.stopPropagation) {
+      event.nativeEvent.stopPropagation();
+    }
+  },
+
+  clearLongPressTimer: function() {
+    if (this.longPressTimer) {
+      clearTimeout(this.longPressTimer);
+      this.longPressTimer = null;
+    }
+  },
+
+  onStockTouchStart: function(stock, event) {
+    if (!stock) return;
+    this.clearLongPressTimer();
+    this.touchingKey = this.getAssetKey(stock);
+    this.touchMoved = false;
+    this.longPressTriggered = false;
+    this.touchStartTs = Date.now();
+    var pt = this.extractTouchPoint(event);
+    this.touchStartX = pt.x;
+    this.touchStartY = pt.y;
+    this.longPressTimer = setTimeout(function() {
+      if (this.touchingKey !== this.getAssetKey(stock) || this.touchMoved) return;
+      this.longPressTriggered = true;
+      this.suppressClickUntil = Date.now() + 800;
+      this.enterEditMode(stock);
+    }.bind(this), 1000);
+  },
+
+  onStockTouchMove: function(stock, event) {
+    if (!stock) return;
+    if (this.touchingKey !== this.getAssetKey(stock)) return;
+    var pt = this.extractTouchPoint(event);
+    var dx = pt.x - this.touchStartX;
+    var dy = pt.y - this.touchStartY;
+    if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+      this.touchMoved = true;
+      this.clearLongPressTimer();
+    }
+  },
+
+  onStockTouchEnd: function(stock, event) {
+    if (!stock) return;
+    if (this.touchingKey !== this.getAssetKey(stock)) return;
+    var pt = this.extractTouchPoint(event);
+    var dx = pt.x - this.touchStartX;
+    var dy = pt.y - this.touchStartY;
+    var elapsed = Date.now() - this.touchStartTs;
+    this.clearLongPressTimer();
+    var isRightSwipe = dx > 45 && Math.abs(dx) > Math.abs(dy) + 10;
+    if (isRightSwipe && !this.longPressTriggered) {
+      this.suppressClickUntil = Date.now() + 350;
+      this.routeDetail(stock);
+    }
+    var isTap = Math.abs(dx) < 10 && Math.abs(dy) < 10 && elapsed < 400;
+    if (!isTap && !isRightSwipe) {
+      this.suppressClickUntil = Date.now() + 300;
+    }
+    this.touchingKey = "";
+  },
+
+  enterEditMode: function(stock) {
+    this.editingKey = this.getAssetKey(stock);
+    this.isEditing = true;
+    try {
+      vibrator.vibrate({ mode: "short" });
+    } catch (e) {}
+  },
+
+  exitEditMode: function() {
+    this.isEditing = false;
+    this.editingKey = "";
+  },
+
+  reorderStocksByVisibleOrder: function(assetKey, step) {
+    var visibleKeys = this.displayStocks.map(function(item) {
+      return item.assetKey;
+    });
+    var idx = visibleKeys.indexOf(assetKey);
+    if (idx < 0) return false;
+    var swapIdx = idx + step;
+    if (swapIdx < 0 || swapIdx >= visibleKeys.length) return false;
+    var tmp = visibleKeys[idx];
+    visibleKeys[idx] = visibleKeys[swapIdx];
+    visibleKeys[swapIdx] = tmp;
+
+    var byKey = {};
+    for (var i = 0; i < this.stocks.length; i++) {
+      byKey[this.getAssetKey(this.stocks[i])] = this.stocks[i];
+    }
+
+    var next = [];
+    for (var j = 0; j < visibleKeys.length; j++) {
+      if (byKey[visibleKeys[j]]) {
+        next.push(byKey[visibleKeys[j]]);
+      }
+    }
+
+    for (var k = 0; k < next.length; k++) {
+      next[k].addedAt = k;
+    }
+
+    this.stocks = next;
+    this.sortMode = "sequence";
+    this.syncSortUi();
+    return true;
+  },
+
+  onMoveStockUp: function(stock, event) {
+    this.stopEvent(event);
+    if (!stock) return;
+    if (!this.reorderStocksByVisibleOrder(stock.assetKey || this.getAssetKey(stock), -1)) return;
+    this.sortAndRender();
+    this.persistCurrentState();
+    prompt.showToast({
+      message: "已上移",
+      duration: 800
+    });
+  },
+
+  onMoveStockDown: function(stock, event) {
+    this.stopEvent(event);
+    if (!stock) return;
+    if (!this.reorderStocksByVisibleOrder(stock.assetKey || this.getAssetKey(stock), 1)) return;
+    this.sortAndRender();
+    this.persistCurrentState();
+    prompt.showToast({
+      message: "已下移",
+      duration: 800
+    });
+  },
+
+  onDeleteStock: function(stock, event) {
+    this.stopEvent(event);
+    this.deleteStockFromList(stock);
+  },
+
+  deleteStockFromList: function(stock) {
+    var curKey = stock && stock.assetKey ? stock.assetKey : this.getAssetKey(stock);
+    var next = [];
+    for (var i = 0; i < this.stocks.length; i++) {
+      if (this.getAssetKey(this.stocks[i]) !== curKey) {
+        next.push(this.stocks[i]);
+      }
+    }
+    if (next.length === this.stocks.length) return;
+    if (!next.length) {
+      next = this.getDefaultStocks();
+    }
+    for (var j = 0; j < next.length; j++) {
+      next[j].addedAt = j;
+    }
+    this.stocks = next;
+    this.exitEditMode();
+    this.sortAndRender();
+    this.persistCurrentState();
+    try {
+      vibrator.vibrate({ mode: "short" });
+    } catch (e) {}
+    prompt.showToast({
+      message: "已删除 " + (stock.name || stock.code),
+      duration: 1200
+    });
+  },
+
+  addStockCard: function() {
+    router.push({
+      uri: "/pages/add"
+    });
+  },
+
+  openSettings: function() {
+    router.push({
+      uri: "/pages/settings"
+    });
+  },
+
+  startRefreshTimer: function() {
+    this.stopRefreshTimer();
+    this.refreshTimer = setInterval(function() {
+      this.refreshAllStocks(true);
+    }.bind(this), 5000);
+  },
+
+  stopRefreshTimer: function() {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  },
+
+  startClockTimer: function() {
+    this.stopClockTimer();
+    this.updateCurrentTime();
+    this.clockTimer = setInterval(function() {
+      this.updateCurrentTime();
+    }.bind(this), 1000);
+  },
+
+  stopClockTimer: function() {
+    if (this.clockTimer) {
+      clearInterval(this.clockTimer);
+      this.clockTimer = null;
+    }
+  },
+
+  updateCurrentTime: function() {
+    var now = new Date();
+    var h = now.getHours();
+    var m = now.getMinutes();
+    this.currentTime = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+  },
+
+  buildQuoteUrl: function(stock) {
+    var type = stock.type || this.normalizeType(stock);
+    if (type === "fund") {
+      return "https://fundgz.1234567.com.cn/js/" + stock.code + ".js?rt=" + Date.now();
+    }
+    if (type === "crypto") {
+      return "https://www.okx.com/api/v5/market/ticker?instId=" + stock.code;
+    }
+    if (type === "metal") {
+      return this.buildTencentHfQuoteUrl(stock.code);
+    }
+    if (type === "us") {
+      return "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data&code=us" + String(stock.code).toUpperCase() + "&r=" + Math.random();
+    }
+    var prefix = this.getMarketPrefix(stock.code, type);
+    return "https://web.ifzq.gtimg.cn/appstock/app/minute/query?_var=min_data&code=" + prefix + stock.code + "&r=" + Math.random();
+  },
+
+  parseTencentResponse: function(resData, stockCode, prefix) {
+    var raw = null;
+    if (resData && typeof resData === "object") {
+      raw = resData;
+    } else {
+      var jsonStr = String(resData || "");
+      if (jsonStr.indexOf("min_data=") === 0) {
+        jsonStr = jsonStr.substring("min_data=".length);
+      }
+      jsonStr = jsonStr.replace(/;$/, "");
+      raw = JSON.parse(jsonStr);
+    }
+    var key = prefix + stockCode;
+    if (!raw || !raw.data || !raw.data[key] || !raw.data[key].qt || !raw.data[key].qt[key]) return null;
+    var qt = raw.data[key].qt[key];
+    var name = qt[1] || stockCode;
+    var cur = parseFloat(qt[3]) || 0;
+    var pre = parseFloat(qt[4]) || 0;
+    if (prefix === "us") {
+      var changeVal = parseFloat(qt[31]);
+      var changePct = parseFloat(qt[32]);
+      if (isNaN(changeVal)) changeVal = cur - pre;
+      if (isNaN(changePct)) changePct = (changeVal / (pre || 1)) * 100;
+      return {
+        name: name,
+        curPrice: cur,
+        changeValue: changeVal,
+        changeRate: changePct
+      };
+    }
+    var diff = cur - pre;
+    return {
+      name: name,
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: (diff / (pre || 1)) * 100
+    };
+  },
+
+  parseFundResponse: function(resData, code) {
+    var jsonStr = String(resData || "").replace(/^jsonpgz\(/, "").replace(/\);?$/, "");
+    var raw = JSON.parse(jsonStr);
+    if (!raw || !raw.fundcode) return null;
+    return {
+      name: raw.name || code,
+      curPrice: parseFloat(raw.gsz || raw.dwjz) || 0,
+      changeValue: 0,
+      changeRate: parseFloat(raw.gszzl) || 0
+    };
+  },
+
+  parseCryptoResponse: function(resData, code) {
+    var raw = JSON.parse(resData || "{}");
+    if (!raw || raw.code !== "0" || !raw.data || !raw.data[0]) return null;
+    var data = raw.data[0];
+    var cur = parseFloat(data.last) || 0;
+    var open = parseFloat(data.open24h) || cur;
+    var diff = cur - open;
+    return {
+      name: code,
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: (diff / (open || 1)) * 100
+    };
+  },
+
+  getMetalSecId: function(code) {
+    var c = String(code || "").toUpperCase();
+    if (c === "XAU" || c === "XAUUSD" || c === "LONGLD" || c === "GC0" || c === "GC00Y") return "122.XAU";
+    if (c === "XAG" || c === "XAGUSD" || c === "LONSILVER" || c === "SI0" || c === "SI00Y") return "122.XAG";
+    return "";
+  },
+
+  getTencentHfSymbol: function(code) {
+    var c = String(code || "").toUpperCase();
+    if (c === "XAG" || c === "XAGUSD" || c === "LONSILVER" || c === "SI0" || c === "SI00Y") return "SI";
+    return "GC";
+  },
+
+  getMetalDisplayName: function(code) {
+    return this.getTencentHfSymbol(code) === "SI" ? "伦敦银" : "伦敦金";
+  },
+
+  buildTencentHfQuoteUrl: function(code) {
+    return "https://qt.gtimg.cn/q=hf_" + this.getTencentHfSymbol(code);
+  },
+
+  buildEastmoneyStockGetUrl: function(code) {
+    var secid = this.getMetalSecId(code);
+    if (!secid) return "";
+    return "https://push2.eastmoney.com/api/qt/stock/get?secid=" + secid + "&fields=f43,f57,f58,f60,f169,f170,f152,f12,f13&fltt=1&ut=fa5fd1943c7b386f172d6893dbfba10b";
+  },
+
+  parseJsonResponse: function(resData) {
+    if (resData && typeof resData === "object") return resData;
+    return JSON.parse(String(resData || "{}"));
+  },
+
+  pickEastmoneyMetalRow: function(payload, code) {
+    if (!payload) return null;
+    var targetCode = String(code || "").toUpperCase();
+    var row = null;
+    if (payload.diff) {
+      var diff = payload.diff;
+      var list = [];
+      if (Array.isArray(diff)) {
+        list = diff;
+      } else if (typeof diff === "object") {
+        var keys = Object.keys(diff);
+        for (var i = 0; i < keys.length; i++) {
+          if (diff[keys[i]]) list.push(diff[keys[i]]);
+        }
+      }
+      for (var j = 0; j < list.length; j++) {
+        if (String(list[j].f12 || "").toUpperCase() === targetCode) {
+          row = list[j];
+          break;
+        }
+      }
+      if (!row && list.length > 0) row = list[0];
+    } else if (typeof payload.f2 !== "undefined") {
+      row = payload;
+    }
+    return row;
+  },
+
+  parseEastmoneyMetalPayload: function(raw, code) {
+    if (!raw || raw.rc !== 0 || !raw.data) return null;
+    var row = this.pickEastmoneyMetalRow(raw.data, code);
+    if (!row || typeof row.f2 === "undefined") return null;
+    var cur = parseFloat(row.f2) || 0;
+    var pre = parseFloat(row.f18) || parseFloat(row.f17) || cur;
+    var diff = parseFloat(row.f4);
+    if (isNaN(diff)) diff = cur - pre;
+    var rate = parseFloat(row.f3);
+    if (isNaN(rate)) rate = (diff / (pre || 1)) * 100;
+    return {
+      name: row.f14 || code,
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseTencentHfResponse: function(resData, code) {
+    var text = String(resData || "");
+    var sym = this.getTencentHfSymbol(code);
+    var re = new RegExp("v_hf_" + sym + '="([^"]+)"');
+    var match = text.match(re);
+    if (!match) return null;
+    var parts = match[1].split(",");
+    if (parts.length < 2) return null;
+    var cur = parseFloat(parts[0]);
+    if (isNaN(cur) || cur <= 0) return null;
+    var rate = parseFloat(parts[1]);
+    if (isNaN(rate)) rate = 0;
+    var pre = parseFloat(parts[7]);
+    if (isNaN(pre) || pre <= 0) {
+      pre = rate === 0 ? cur : cur / (1 + rate / 100);
+    }
+    var diff = cur - pre;
+    return {
+      name: parts.length > 13 ? parts[13] : this.getMetalDisplayName(code),
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseEastmoneyStockGetPayload: function(raw, code) {
+    if (!raw || raw.rc !== 0 || !raw.data) return null;
+    var d = raw.data;
+    if (typeof d.f43 === "undefined") return null;
+    var dec = parseInt(d.f152, 10);
+    if (isNaN(dec) || dec < 0) dec = 2;
+    var scale = Math.pow(10, dec);
+    var cur = parseFloat(d.f43) / scale;
+    var pre = parseFloat(d.f60) / scale;
+    if (isNaN(cur) || cur <= 0) return null;
+    if (isNaN(pre) || pre <= 0) pre = cur;
+    var diff = parseFloat(d.f169) / scale;
+    if (isNaN(diff)) diff = cur - pre;
+    var rate = parseFloat(d.f170) / 100;
+    if (isNaN(rate)) rate = (diff / (pre || 1)) * 100;
+    return {
+      name: d.f58 || this.getMetalDisplayName(code),
+      curPrice: cur,
+      changeValue: diff,
+      changeRate: rate
+    };
+  },
+
+  parseMetalResponse: function(resData, code) {
+    var parsed = this.parseTencentHfResponse(resData, code);
+    if (parsed) return parsed;
+    try {
+      var raw = this.parseJsonResponse(resData);
+      parsed = this.parseEastmoneyStockGetPayload(raw, code);
+      if (parsed) return parsed;
+      return this.parseEastmoneyMetalPayload(raw, code);
+    } catch (e) {
+      return null;
+    }
+  },
+
+  buildEastmoneyMetalQuoteUrl: function(code) {
+    var secid = this.getMetalSecId(code);
+    if (!secid) return "";
+    return "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&fields=f12,f14,f2,f3,f4,f17,f18,f15,f16,f13&secids=" + secid + "&ut=fa5fd1943c7b386f172d6893dbfba10b";
+  },
+
+  parseQuoteResponse: function(resData, stock) {
+    var type = stock.type || this.normalizeType(stock);
+    if (type === "fund") return this.parseFundResponse(resData, stock.code);
+    if (type === "crypto") return this.parseCryptoResponse(resData, stock.code);
+    if (type === "metal") return this.parseMetalResponse(resData, stock.code);
+    return this.parseTencentResponse(resData, stock.code, this.getMarketPrefix(stock.code, type));
+  },
+
+  checkAndTriggerAlertForStock: function(stock) {
+    if (!stock || stock.alertRate === null || stock.alertBaseRate === null) return false;
+    var nowRate = typeof stock.changeRate === "number" ? stock.changeRate : 0;
+    var alertRate = stock.alertRate;
+    var baseRate = stock.alertBaseRate;
+    var trigger = false;
+    var alertType = "";
+    if (alertRate > baseRate) {
+      if (nowRate >= alertRate - 0.01) {
+        trigger = true;
+        alertType = "突破";
+      }
+    } else if (alertRate < baseRate) {
+      if (nowRate <= alertRate + 0.01) {
+        trigger = true;
+        alertType = "跌破";
+      }
+    } else {
+      return false;
+    }
+    if (!trigger) return false;
+    try {
+      vibrator.vibrate({ mode: "long" });
+      prompt.showToast({
+        message: (stock.name || stock.code) + "(" + stock.code + ") 已" + alertType + " " + alertRate.toFixed(2) + "%",
+        duration: 2000
+      });
+    } catch (e) {}
+    stock.alertRate = null;
+    stock.alertBaseRate = null;
+    return true;
+  },
+
+  refreshAllStocks: function(needSave) {
+    if (!this.pageActive) {
+      return;
+    }
+    if (!this.stocks || this.stocks.length === 0) {
+      this.sortAndRender();
+      return;
+    }
+    if (this.refreshBusy) {
+      this.refreshNeedSave = this.refreshNeedSave || !!needSave;
+      this.refreshPendingAgain = true;
+      return;
+    }
+    this.refreshNeedSave = !!needSave;
+    this.refreshQueue = [];
+    for (var i = 0; i < this.stocks.length; i++) {
+      this.refreshQueue.push({
+        stock: this.stocks[i],
+        idx: i
+      });
+    }
+    this.runNextStockRefresh();
+  },
+
+  runNextStockRefresh: function() {
+    if (!this.pageActive || !this.refreshQueue.length) {
+      this.refreshBusy = false;
+      if (this.pageActive) {
+        this.sortAndRender();
+        if (this.refreshNeedSave) {
+          this.refreshNeedSave = false;
+          this.persistCurrentState();
+        }
+        if (this.refreshPendingAgain) {
+          this.refreshPendingAgain = false;
+          this.refreshAllStocks(false);
+        }
+      } else {
+        this.refreshQueue = [];
+        this.refreshNeedSave = false;
+        this.refreshPendingAgain = false;
+      }
+      return;
+    }
+
+    this.refreshBusy = true;
+    var item = this.refreshQueue.shift();
+    var stock = item.stock;
+    var idx = item.idx;
+    var self = this;
+    var token = this.refreshToken || 0;
+
+    fetch.fetch({
+      url: this.buildQuoteUrl(stock),
+      method: "GET",
+      success: function(res) {
+        if (token !== self.refreshToken || !self.pageActive) {
+          self.refreshQueue = [];
+          self.refreshBusy = false;
+          return;
+        }
+        try {
+          var parsed = self.parseQuoteResponse(res.data, stock);
+          if (parsed) {
+            self.stocks[idx].name = parsed.name;
+            self.stocks[idx].market = self.getMarketTagByCode(stock.code, stock.type);
+            self.stocks[idx].curPrice = parsed.curPrice;
+            self.stocks[idx].changeValue = parsed.changeValue;
+            self.stocks[idx].changeRate = parsed.changeRate;
+            if (self.checkAndTriggerAlertForStock(self.stocks[idx])) {
+              self.refreshNeedSave = true;
+            }
+          }
+        } catch (e) {}
+        self.runNextStockRefresh();
+      },
+      fail: function() {
+        if (token !== self.refreshToken || !self.pageActive) {
+          self.refreshQueue = [];
+          self.refreshBusy = false;
+          return;
+        }
+        self.runNextStockRefresh();
+      }
+    });
+  }
+};
+</script>
+
+<style>
+.page {
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: scroll;
+}
+
+.header {
+  width: 88%;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 18px;
+  padding-bottom: 10px;
+}
+
+.title-row {
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+}
+
+.header-slot {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+}
+
+.header-slot-left {
+  justify-content: flex-start;
+}
+
+.header-slot-center {
+  justify-content: center;
+}
+
+.header-slot-right {
+  justify-content: flex-end;
+}
+
+.clock-text {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.setting-btn {
+  min-width: 56px;
+  height: 42px;
+  border-radius: 10px;
+  background-color: #2a2a2a;
+  justify-content: center;
+  align-items: center;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+.setting-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.sort-label {
+  background-color: #2a2a2a;
+  border-radius: 10px;
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.sort-label-text {
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: bold;
+  max-lines: 1;
+}
+
+.list-wrap {
+  width: 88%;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.stock-card {
+  width: 100%;
+  flex-shrink: 0;
+  background-color: #101214;
+  border-width: 2px;
+  border-style: solid;
+  border-color: #2f3540;
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 10px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.stock-card-content {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.left-col {
+  flex-direction: column;
+}
+
+.stock-name {
+  color: #ffffff;
+  font-size: 27px;
+  font-weight: bold;
+  max-lines: 1;
+}
+
+.code-row {
+  margin-top: 6px;
+  flex-direction: row;
+  align-items: center;
+}
+
+.market-tag {
+  min-width: 28px;
+  height: 24px;
+  border-radius: 12px;
+  background-color: #45484d;
+  text-align: center;
+  color: #d5d8de;
+  font-size: 16px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.stock-code {
+  margin-left: 8px;
+  color: #aeb3bc;
+  font-size: 20px;
+}
+
+.right-col {
+  min-width: 130px;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.rate-chip {
+  min-width: 112px;
+  height: 50px;
+  border-radius: 10px;
+  justify-content: center;
+  align-items: center;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.rate-text {
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: bold;
+}
+
+.price-text {
+  margin-top: 5px;
+  color: #9fa4ad;
+  font-size: 18px;
+}
+
+.add-card {
+  width: 100%;
+  flex-shrink: 0;
+  height: 88px;
+  border-radius: 14px;
+  background-color: #101214;
+  justify-content: center;
+  align-items: center;
+}
+
+.add-text {
+  color: #ffffff;
+  font-size: 66px;
+  line-height: 66px;
+}
+
+.action-buttons {
+  width: 100%;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 64px;
+}
+
+.action-btn {
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 6px 4px;
+  border-radius: 10px;
+  margin: 0 4px;
+}
+
+.action-btn-up {
+  background-color: #1a3d5c;
+}
+
+.action-btn-down {
+  background-color: #1a3d5c;
+}
+
+.action-btn-delete {
+  background-color: #4a1c1c;
+}
+
+.action-icon {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+  line-height: 24px;
+}
+
+.action-label {
+  color: #ffffff;
+  font-size: 16px;
+  margin-top: 4px;
+}
+</style>

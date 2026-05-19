@@ -1,0 +1,15 @@
+      <motion class="title-row">
+        <motion class="header-slot header-slot-left">
+          <text class="clock-text">{{ currentTime }}</text>
+        </motion>
+        <motion class="header-slot header-slot-center">
+          <motion class="setting-btn" @click="openSettings">
+            <image class="setting-icon" src="/common/setting.png"></image>
+          </motion>
+        </motion>
+        <motion class="header-slot header-slot-right">
+          <motion class="sort-label" @click="toggleSortDirection">
+            <text class="sort-label-text">{{ sortLabelText }}</text>
+          </motion>
+        </motion>
+      </motion>
