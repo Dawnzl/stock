@@ -1,0 +1,213 @@
+<template>
+  <div class="page">
+    <div class="top-bar">
+      <div class="back-btn" @click="goBack">
+        <text class="back-text">←</text>
+      </div>
+      <text class="title">设置</text>
+      <div class="placeholder"></div>
+    </div>
+
+    <div class="card" @click="toggleKeepScreenOn">
+      <div class="card-left">
+        <text class="card-title">熄屏常亮</text>
+        <text class="card-desc">控制看盘时是否常亮</text>
+      </div>
+      <text class="card-value">{{ keepScreenOn ? "开启" : "关闭" }}</text>
+    </div>
+
+    <div class="card" @click="toggleSortMode">
+      <div class="card-left">
+        <text class="card-title">涨跌幅按钮</text>
+        <text class="card-desc">切换排序方式</text>
+      </div>
+      <text class="card-value">{{ sortModeText }}</text>
+    </div>
+  </div>
+</template>
+
+<script>
+import router from "@system.router";
+import storage from "@system.storage";
+import brightness from "@system.brightness";
+import prompt from "@system.prompt";
+
+const STORAGE_KEY = "stock_watch_data";
+
+export default {
+  private: {
+    keepScreenOn: true,
+    sortMode: "change",
+    sortModeText: "涨跌幅排序"
+  },
+
+  onInit: function() {
+    this.loadSettings();
+  },
+
+  loadSettings: function() {
+    storage.get({
+      key: STORAGE_KEY,
+      default: "",
+      success: function(value) {
+        var data = {};
+        try {
+          data = value ? JSON.parse(value) : {};
+        } catch (e) {
+          data = {};
+        }
+        this.keepScreenOn = typeof data.keepScreenOn === "boolean" ? data.keepScreenOn : true;
+        this.sortMode = data.sortMode === "sequence" ? "sequence" : "change";
+        this.syncSortText();
+        this.applyKeepScreenOn();
+      }.bind(this),
+      fail: function() {
+        this.syncSortText();
+      }.bind(this)
+    });
+  },
+
+  syncSortText: function() {
+    this.sortModeText = this.sortMode === "sequence" ? "添加顺序" : "涨跌幅排序";
+  },
+
+  saveSettings: function(patch) {
+    storage.get({
+      key: STORAGE_KEY,
+      default: "",
+      success: function(value) {
+        var data = {};
+        try {
+          data = value ? JSON.parse(value) : {};
+        } catch (e) {
+          data = {};
+        }
+        for (var key in patch) {
+          data[key] = patch[key];
+        }
+        storage.set({
+          key: STORAGE_KEY,
+          value: JSON.stringify(data)
+        });
+      }
+    });
+  },
+
+  applyKeepScreenOn: function() {
+    try {
+      brightness.setKeepScreenOn({
+        keepScreenOn: !!this.keepScreenOn
+      });
+    } catch (e) {}
+  },
+
+  toggleKeepScreenOn: function() {
+    this.keepScreenOn = !this.keepScreenOn;
+    this.applyKeepScreenOn();
+    this.saveSettings({
+      keepScreenOn: this.keepScreenOn
+    });
+    prompt.showToast({
+      message: this.keepScreenOn ? "已开启常亮" : "已关闭常亮",
+      duration: 1000
+    });
+  },
+
+  toggleSortMode: function() {
+    this.sortMode = this.sortMode === "change" ? "sequence" : "change";
+    this.syncSortText();
+    this.saveSettings({
+      sortMode: this.sortMode
+    });
+    prompt.showToast({
+      message: this.sortModeText,
+      duration: 1000
+    });
+  },
+
+  goBack: function() {
+    router.back();
+  }
+};
+</script>
+
+<style>
+.page {
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+}
+
+.top-bar {
+  width: 90%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.back-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 21px;
+  background-color: #101214;
+  justify-content: center;
+  align-items: center;
+}
+
+.back-text {
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.title {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.placeholder {
+  width: 42px;
+  height: 42px;
+}
+
+.card {
+  width: 90%;
+  background-color: #101214;
+  border-radius: 14px;
+  border-width: 2px;
+  border-color: #2f3540;
+  padding: 14px 12px;
+  margin-bottom: 10px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-left {
+  width: 150px;
+  flex-direction: column;
+}
+
+.card-title {
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.card-desc {
+  margin-top: 4px;
+  color: #8d97a6;
+  font-size: 16px;
+}
+
+.card-value {
+  color: #8fc5ff;
+  font-size: 20px;
+  font-weight: bold;
+  text-align: right;
+}
+</style>
